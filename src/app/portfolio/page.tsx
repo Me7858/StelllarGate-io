@@ -14,6 +14,10 @@ import { collateralRequired } from "../../lib/collateral";
 import { toCsv, downloadCsv } from "../../lib/csv";
 import { ExportButton } from "../../components/ExportButton";
 import { PortfolioRiskPanel } from "../../components/PortfolioRiskPanel";
+import { AccountReadinessChecklist } from "../../components/AccountReadinessChecklist";
+import { ReconciliationPanel } from "../../components/ReconciliationPanel";
+import { DepositWithdrawModal } from "../../components/DepositWithdrawModal";
+import { useNetworkReady } from "../../lib/hooks/useNetworkReady";
 
 interface Marked extends Position {
   spot: number;
@@ -32,7 +36,11 @@ export default function PortfolioPage() {
   const balance = account?.balance ?? 0;
   const collateralLocked = account?.collateral_locked ?? 0;
   const notSignedIn = !token;
+  const networkReady = useNetworkReady();
+  const canSign = networkReady && !notSignedIn;
   const [actionError, setActionError] = useState<string|null>(null);
+  const [showVaultModal, setShowVaultModal] = useState(false);
+  const [vaultModalMode, setVaultModalMode] = useState<"deposit"|"withdraw">("deposit");
 
   // Live from the shared WebSocket feed (SpotFeedProvider) — one
   // connection covers every underlying, so marking every open position
@@ -171,6 +179,18 @@ export default function PortfolioPage() {
           <div style={{width:5,height:5,borderRadius:"50%",background:"var(--call)"}}/>
           <span style={{fontSize:10,color:"var(--text-lo)"}}>Marked to market · Stellar Testnet</span>
           <div style={{width:1,height:16,background:"var(--border-default)",margin:"0 8px"}}/>
+          <button
+            onClick={()=>{setVaultModalMode("deposit");setShowVaultModal(true);}}
+            aria-label="Deposit collateral"
+            style={{padding:"4px 10px",fontSize:11,fontWeight:700,background:"var(--call-dim)",color:"var(--call)",border:"1px solid var(--call)",cursor:"pointer"}}>
+            Deposit
+          </button>
+          <button
+            onClick={()=>{setVaultModalMode("withdraw");setShowVaultModal(true);}}
+            aria-label="Withdraw collateral"
+            style={{padding:"4px 10px",fontSize:11,fontWeight:700,background:"var(--bg-overlay)",color:"var(--text-mid)",border:"1px solid var(--border-default)",cursor:"pointer"}}>
+            Withdraw
+          </button>
           <WalletConnect />
         </div>
       </AppHeader>
@@ -230,6 +250,14 @@ export default function PortfolioPage() {
           )}
 
           {backendPositions.length>0 && <PortfolioRiskPanel positions={backendPositions} spots={spots} />}
+
+          {/* On-chain readiness & reconciliation — shown when wallet is connected */}
+          {!notSignedIn && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:24}}>
+              <AccountReadinessChecklist />
+              <ReconciliationPanel positions={backendPositions} />
+            </div>
+          )}
 
           {strategyGroups.length>0 && (
             <div style={{marginBottom:24,display:"flex",flexDirection:"column",gap:8}}>
@@ -401,6 +429,13 @@ export default function PortfolioPage() {
           )}
         </div>
       </div>
+
+      {showVaultModal && (
+        <DepositWithdrawModal
+          initialMode={vaultModalMode}
+          onClose={()=>setShowVaultModal(false)}
+        />
+      )}
     </div>
   );
 }

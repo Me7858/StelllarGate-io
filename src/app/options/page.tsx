@@ -19,6 +19,7 @@ import { StarButton } from "../../components/StarButton";
 import { SpotPriceChart } from "../../components/SpotPriceChart";
 import { usePriceHistory } from "../../lib/usePriceHistory";
 import { useHydrated } from "../../lib/useHydrated";
+import { useNetworkReady } from "../../lib/hooks/useNetworkReady";
 import { StrategyPicker } from "../../components/StrategyPicker";
 import { MultiLegPayoffDiagram } from "../../components/MultiLegPayoffDiagram";
 import { VolSurfaceHeatmap } from "../../components/VolSurfaceHeatmap";
@@ -193,9 +194,12 @@ function OptionsPageContent() {
   const requiredFunds=trade?(trade.mode==="write"?collateral:(tradeGreeks?.premium??0)*qty):0;
   const insufficientFunds=balance<requiredFunds;
   const notSignedIn=!token;
+  const networkReady=useNetworkReady();
+  // Block signing whenever the wallet's network doesn't match the app's expected network.
+  const canSign=networkReady&&!notSignedIn;
 
   const execTrade=async()=>{
-    if(!trade||!tradeGreeks||insufficientFunds||submitting)return;
+    if(!trade||!tradeGreeks||insufficientFunds||submitting||!networkReady)return;
     setSubmitting(true);
     setTradeError(null);
     try{
@@ -214,7 +218,7 @@ function OptionsPageContent() {
   };
 
   const execStrategy=async()=>{
-    if(!selectedStrategy||pricedLegs.length===0||strategyInsufficientFunds||submitting)return;
+    if(!selectedStrategy||pricedLegs.length===0||strategyInsufficientFunds||submitting||!networkReady)return;
     setSubmitting(true);
     setTradeError(null);
     try{
@@ -500,7 +504,7 @@ function OptionsPageContent() {
                   <div style={{marginTop:16}}>
                     <MultiLegPayoffDiagram legs={pricedLegs} spot={spot} width={420} height={220}/>
                   </div>
-                  <button onClick={()=>{setTradeError(null);setShowStrategyConfirm(true);}} disabled={strategyInsufficientFunds||notSignedIn} style={{marginTop:12,padding:"10px 20px",
+                  <button onClick={()=>{setTradeError(null);setShowStrategyConfirm(true);}} disabled={strategyInsufficientFunds||!canSign} style={{marginTop:12,padding:"10px 20px",
                     background:"var(--brand)",color:"var(--bg)",border:"none",fontSize:13,fontWeight:700,
                     cursor:strategyInsufficientFunds||notSignedIn?"default":"pointer",opacity:strategyInsufficientFunds||notSignedIn?0.5:1}}>
                     Execute {selectedStrategy.name} ({pricedLegs.length} legs)
@@ -670,9 +674,9 @@ function OptionsPageContent() {
                   </div>
                 )}
               </div>
-              <button onClick={()=>{setTradeError(null);setShowTradeConfirm(true);}} disabled={insufficientFunds||notSignedIn} style={{width:"100%",height:44,borderRadius:0,border:"none",
-                cursor:insufficientFunds||notSignedIn?"default":"pointer",fontSize:14,fontWeight:700,
-                opacity:insufficientFunds||notSignedIn?0.5:1,
+              <button onClick={()=>{setTradeError(null);setShowTradeConfirm(true);}} disabled={insufficientFunds||!canSign} style={{width:"100%",height:44,borderRadius:0,border:"none",
+                cursor:insufficientFunds||!canSign?"default":"pointer",fontSize:14,fontWeight:700,
+                opacity:insufficientFunds||!canSign?0.5:1,
                 background:trade.side==="call"?"var(--call)":"var(--put)",color:"var(--bg)"}}>
                 {trade.mode==="write"?"Write":"Buy"} {trade.side.toUpperCase()} @ {fmtK(trade.row.strike)}
               </button>
@@ -717,8 +721,8 @@ function OptionsPageContent() {
           confirmLabel={submitting?"Submitting…":`Confirm ${trade.mode==="write"?"Write":"Buy"}`}
           onConfirm={execTrade}
           onCancel={()=>setShowTradeConfirm(false)}
-          disabled={insufficientFunds||notSignedIn||submitting||!!tradeError}
-          disabledReason={tradeError??(insufficientFunds?`Insufficient balance ${trade.mode==="write"?"to post collateral":"to cover premium"}.`:undefined)}
+          disabled={insufficientFunds||!canSign||submitting||!!tradeError}
+          disabledReason={tradeError??(insufficientFunds?`Insufficient balance ${trade.mode==="write"?"to post collateral":"to cover premium"}.`:!networkReady?"Network mismatch — check the banner at the top.":undefined)}
         >
           {[
             ["Strike",fmtK(trade.row.strike)],
@@ -741,8 +745,8 @@ function OptionsPageContent() {
           confirmLabel={submitting?"Submitting…":"Confirm Execute"}
           onConfirm={execStrategy}
           onCancel={()=>setShowStrategyConfirm(false)}
-          disabled={strategyInsufficientFunds||notSignedIn||submitting||!!tradeError}
-          disabledReason={tradeError??(strategyInsufficientFunds?`Insufficient balance — needs $${fmtN(strategyRequiredFunds,2)}, have $${fmtN(balance,2)}.`:notSignedIn?"Connect your wallet to trade.":undefined)}
+          disabled={strategyInsufficientFunds||!canSign||submitting||!!tradeError}
+          disabledReason={tradeError??(strategyInsufficientFunds?`Insufficient balance — needs $${fmtN(strategyRequiredFunds,2)}, have $${fmtN(balance,2)}.`:!networkReady?"Network mismatch — check the banner at the top.":notSignedIn?"Connect your wallet to trade.":undefined)}
         >
           {pricedLegs.map((leg,i)=>(
             <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
