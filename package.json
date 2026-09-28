@@ -6,13 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",
     "@stellar/freighter-api": "^2.0.0",
+    "@stellar/stellar-sdk": "^17.1.0",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
@@ -24,6 +26,7 @@
     "autoprefixer": "^10",
     "postcss": "^8",
     "eslint": "^8",
-    "eslint-config-next": "14.2.3"
+    "eslint-config-next": "14.2.3",
+    "vitest": "^2.1.8"
   }
 }

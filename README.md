@@ -47,6 +47,7 @@ preview chain and the options chain's client-side BS fallback will render.
 ```bash
 npm run build   # production build
 npm run lint     # next lint
+npm test         # vitest — contract verification unit tests
 ```
 
 ## Pages
@@ -57,6 +58,8 @@ npm run lint     # next lint
 | `/options` | The terminal: chain, positions, strategy builder, vol surface |
 | `/portfolio` | Open positions marked-to-market, roll, close, CSV export, portfolio-wide risk panel |
 | `/history` | Full trade ledger (opens + closes) with realized P&L stats |
+| `/contracts` | Contract registry — every contract per network, with a live deployed-WASM-hash check |
+| `/contracts.json` | The same registry, machine-readable (`schema: zenith.contract-registry/1`) |
 
 The `/options` page is tabbed:
 
@@ -79,7 +82,9 @@ src/
 │   ├── page.tsx          # Home
 │   ├── options/          # Chain / Positions / Strategies / Surface
 │   ├── portfolio/        # Open positions, roll, close
-│   └── history/          # Trade ledger
+│   ├── history/          # Trade ledger
+│   ├── contracts/        # Contract registry + live hash verification
+│   └── contracts.json/   # Registry as JSON (route handler)
 ├── components/           # UI components (charts, dialogs, header, etc.)
 └── lib/
     ├── api/              # Typed backend client: one file per domain
@@ -88,10 +93,15 @@ src/
     │   │   strategies.ts, auth.ts, ws.ts, payoff.ts (client exists, unused)
     │   └── types.ts      # Response shapes mirroring the backend's
     ├── hooks/             # useBackend{Account,Positions,Watchlist,Alerts,History},
-    │                      # useSpotFeed (WS reconnect w/ backoff)
+    │                      # useSpotFeed (WS reconnect w/ backoff),
+    │                      # useContractVerification (live contract hash check)
     ├── context/
     │   ├── BackendDataContext.tsx  # one shared account/positions/watchlist/alerts instance
     │   └── SpotFeedContext.tsx     # one shared WebSocket connection app-wide
+    ├── soroban/
+    │   ├── networks.ts    # Network passphrases, RPC endpoints (env-overridable), explorer links
+    │   ├── registry.ts    # The contract registry: per-contract, per-network ID + WASM hash
+    │   └── verify.ts      # getLedgerEntries on the instance key → hash comparison
     ├── store/             # zustand + persist — now just wallet.ts (connect,
     │                      # sign-in-with-backend, bearer token)
     ├── pricing.ts        # Black-Scholes, vol smile — fallback/preview layer, see above
@@ -106,6 +116,62 @@ src/
     ├── useHydrated.ts     # SSR-hydration-safety hook (see below) — still relevant for wallet.ts
     └── usePriceHistory.ts # In-memory spot sparkline buffer
 ```
+
+## Contract registry (`/contracts`)
+
+`/contracts` lists every Zenith contract per network with its contract ID,
+expected WASM hash, deployed version, source commit, audit link, explorer
+link, and upgrade history — and, for each one, **live-checks that the code
+running at that address is the release the registry claims**.
+
+The check is one `getLedgerEntries` call per network (the method takes up
+to 200 keys, so all contracts are batched into a single round trip). A
+Soroban contract's instance lives in a `CONTRACT_DATA` ledger entry whose
+key is the `ScVal` `LedgerKeyContractInstance` — not a user-chosen symbol —
+with persistent durability. Reading it yields a `ContractDataEntry` whose
+`val.instance.executable` is either a WASM hash or, for built-in Stellar
+Asset contracts, a `STELLAR_ASSET` variant with no hash at all. That hash is
+compared against the registry.
+
+| Status | Meaning | Blocks on-chain actions |
+|---|---|---|
+| `verified` | Deployed executable hash equals the expected release | no |
+| `mismatch` | Hash differs, the ID is not a contract, or it is a built-in SAC | **yes** |
+| `unverified` | RPC unreachable/timed out/unparseable | **yes** |
+| `not-deployed` | No contract ID or expected hash recorded for this network | no |
+
+The gating is **fail-closed** on purpose: `unverified` is an absence of
+evidence, not evidence of safety, and treating an RPC outage as a green
+light is exactly how a supply-chain swap gets through during an incident.
+It never blocks *reading* — the page renders in every state. `blocksActions()`
+in `verify.ts` is the single place that policy lives.
+
+**Deployments are currently empty.** Zenith has no public deployment yet
+(the backend is still a paper-trading API), so `registry.ts` ships with
+`deployments: {}` rather than plausible-looking placeholder IDs — for a page
+whose entire job is "is this the genuine contract?", invented IDs would be
+actively harmful. The mechanism is live and exercised; it just has nothing
+to compare against. Record a real deployment by filling in the `deployments`
+block for the network in `src/lib/soroban/registry.ts`; an integrator
+pointing at their own deployment can override the same shape via
+`NEXT_PUBLIC_ZENITH_DEPLOYMENTS`.
+
+What this does **not** cover, deliberately: it verifies that the code at an
+address is the expected release, and nothing else. It says nothing about a
+contract's storage, its admin, or its source — all of which an authorized
+call can change without touching this hash — and reproducible-build
+verification is out of scope.
+
+### Tests
+
+`npm test` runs the verification unit tests (`src/lib/soroban/verify.test.ts`),
+which run against fixture ledger entries in
+`src/lib/soroban/__fixtures__/ledgerEntries.ts`. Those fixtures are real XDR
+produced by encoding the same structures the RPC returns, so a change in the
+protocol's encoding surfaces as a failing test rather than a silently-passing
+one. They cover the matching/mismatch paths, the built-in-SAC case, an
+undecodable entry, out-of-order RPC responses, and RPC failure.
+
 
 ### A note on hydration safety
 
@@ -125,9 +191,16 @@ needs the same guard.
 
 ## Known gaps
 
-- No test suite.
+- No test suite for anything except the contract-verification module — that
+  one has unit tests against fixture ledger entries; the rest of `src/lib`
+  (pricing, risk, payoff, vol surface) is untested.
 - No on-chain/Soroban integration — the backend is a paper-trading API, not
-  a wallet transaction signer against the contracts.
+  a wallet transaction signer against the contracts. The `/contracts` page
+  *reads* on-chain state (contract instance hashes via `getLedgerEntries`)
+  but nothing in the app signs or submits a transaction, so the
+  `blocksActions` policy in `verify.ts` has no on-chain call site to gate yet.
+- The contract registry ships with no deployments recorded — see
+  [Contract registry](#contract-registry-contracts) above.
 - Wallet sign-in (`signBlob` → verify → bearer token) hasn't been manually
   confirmed against a live Freighter extension — no extension available in
   this environment. The flow is logically complete, not hardware-tested.
