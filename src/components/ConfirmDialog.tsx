@@ -27,13 +27,8 @@ export function ConfirmDialog({ title, confirmLabel, onConfirm, onCancel, disabl
   }, [onCancel, onConfirm, disabled]);
 
   return (
-    <div onClick={onCancel} style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100,
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: 360, background: "var(--bg-elevated)", border: "1px solid var(--border-default)", padding: 20,
-      }}>
+    <div onClick={onCancel} className="zn-confirm-backdrop">
+      <div onClick={e => e.stopPropagation()} className="zn-confirm-panel">
         <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-hi)", marginBottom: 14 }}>{title}</div>
         {children}
         {disabled && disabledReason && (

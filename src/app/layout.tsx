@@ -32,7 +32,15 @@ export const metadata: Metadata = {
   keywords: ["options", "calls", "puts", "derivatives", "stellar", "soroban", "defi", "black-scholes"],
 };
 
-export const viewport: Viewport = { themeColor: "#14130F" };
+// viewportFit: "cover" is what makes env(safe-area-inset-*) non-zero on iOS —
+// required for the bottom sheet / bottom status bar to clear the home
+// indicator. Pinch-zoom is deliberately left enabled (accessibility).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#14130F",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

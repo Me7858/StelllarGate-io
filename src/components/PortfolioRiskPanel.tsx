@@ -137,7 +137,7 @@ export function PortfolioRiskPanel({ positions, spots, vols }: Props) {
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-hi)" }}>Portfolio Risk</div>
         <div style={{ display: "flex", gap: 2 }}>
           {underlyings.map(u => (
-            <button key={u} onClick={() => setSelected(u)} style={{
+            <button key={u} onClick={() => setSelected(u)} className="zn-tap" style={{
               padding: "3px 10px", border: "none", cursor: "pointer", fontSize: 11,
               background: activeUnderlying === u ? "var(--atm-dim)" : "transparent",
               color: activeUnderlying === u ? "var(--atm)" : "var(--text-lo)",
