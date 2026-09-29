@@ -1,9 +1,34 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { MARKETS, EXPIRIES } from "../../lib/pricing";
+import Link from "next/link";
+import { PayoffDiagram } from "../../components/PayoffDiagram";
+import { VolSmile } from "../../components/VolSmile";
+import { AppHeader } from "../../components/AppHeader";
+import { WalletConnect } from "../../components/WalletConnect";
+import { MARKETS, EXPIRIES, bs, smileVol, seededRandom, fmtN, fmtSpot, fmtK, type Greeks } from "../../lib/pricing";
+import { getExpiryCalendar } from "../../lib/api/market";
+import { ApiError } from "../../lib/api/client";
+import { useBackendData } from "../../lib/context/BackendDataContext";
 import { useSpotFeedContext } from "../../lib/context/SpotFeedContext";
+import { useWalletStore } from "../../lib/store/wallet";
+import { collateralRequired } from "../../lib/collateral";
+import { AlertsPanel } from "../../components/AlertsPanel";
+import { StarButton } from "../../components/StarButton";
+import { SpotPriceChart } from "../../components/SpotPriceChart";
+import { usePriceHistory } from "../../lib/usePriceHistory";
+import { useHydrated } from "../../lib/useHydrated";
+import { StrategyPicker } from "../../components/StrategyPicker";
+import { MultiLegPayoffDiagram } from "../../components/MultiLegPayoffDiagram";
+import { VolSurfaceHeatmap } from "../../components/VolSurfaceHeatmap";
+import { ChainRow as ChainRowView } from "../../components/ChainRow";
+import { useChainFeed } from "../../lib/hooks/useChainFeed";
+import { useStrategyQuote, quoteMove } from "../../lib/hooks/useStrategyQuote";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { type StrategyTemplate } from "../../lib/strategies";
+import type { ChainRowData } from "../../lib/chainRows";
+import { type PricedLeg } from "../../lib/payoff";
 import { useOptionChain, useExpiries } from "./_components/useOptionChain";
 import { MarketHeader } from "./_components/MarketHeader";
 import { MarketSidebar } from "./_components/MarketSidebar";
@@ -16,6 +41,10 @@ import { PortfolioBar } from "./_components/PortfolioBar";
 import { TradeTicket } from "./_components/TradeTicket";
 import { StatusBar } from "./_components/StatusBar";
 import type { TradeState, ViewTab } from "./_components/types";
+
+type ChainRow=ChainRowData;
+// Net premium moving more than this since the confirm dialog opened requires re-confirmation.
+const QUOTE_REQUIRE_RECONFIRM=0.02;
 
 export default function OptionsPage() {
   return (
@@ -65,10 +94,20 @@ function OptionsPageContent() {
     });
   },[favorites,hydrated]);
 
-  // True while the chain shown is the local Black-Scholes fallback, not backend data.
+  // Chain rows are stream-driven (or visibility-aware polling) — see
+  // useChainFeed. The local BS chain below is only the offline fallback.
   const [chainFallback,setChainFallback]=useState(false);
+  const {chain,loading:chainLoading,mode:chainMode}=useChainFeed(sym,expiry.days,()=>
+    Array.from({length:21},(_,i)=>{
+      const n=i-10;
+      const strike=Math.round(spot*(1+n*0.04)*10000)/10000;
+      const v=smileVol(vol,strike/spot);
+      return{strike,call:bs(spot,strike,v,t,true),put:bs(spot,strike,v,t,false),
+        itmCall:spot>strike,itmPut:spot<strike};
+    }));
   const priceDegraded=prov.degraded||chainFallback;
   const priceSource=chainFallback?"fallback-model" as const:prov.source;
+  const openTrade=useCallback((row:ChainRow,side:"call"|"put",mode:"buy"|"write")=>setTrade({row,side,mode}),[]);
 
   // Backend positions don't store per-position Greeks (only the entry
   // premium/spot) — GET /api/v1/portfolio/greeks gives the aggregate, but
@@ -92,13 +131,10 @@ function OptionsPageContent() {
 
   const qty=Math.max(0.01,parseFloat(contracts)||1);
 
-  // Strategy leg pricing still uses the local bs()/smileVol() calc (with
-  // the static seed vol, not the live-polled one) rather than a backend
-  // round trip per leg — out of scope for this pass, which only moved
-  // the chain table and spot ticker over. Premiums here won't always
-  // match a leg's corresponding chain row exactly once vol has drifted
-  // from its seed value.
-  const pricedLegs=useMemo(():PricedLeg[]=>{
+  // Local Black-Scholes pricing of the strategy legs (static seed vol) —
+  // only the offline fallback / initial placeholder for useStrategyQuote,
+  // which prices from the live chain snapshot or the backend /price endpoint.
+  const localLegs=useMemo(():PricedLeg[]=>{
     if(!selectedStrategy)return[];
     return selectedStrategy.legs.map(leg=>{
       const strike=Math.round(spot*leg.strikeOffset*10000)/10000;
@@ -107,8 +143,13 @@ function OptionsPageContent() {
       return{side:leg.side,action:leg.action,strike,contracts:qty,greeks};
     });
   },[selectedStrategy,spot,market.vol,t,qty]);
-
-  const strategyNetPremium=useMemo(()=>netPremium(pricedLegs),[pricedLegs]);
+  const {legs:pricedLegs,netPremium:strategyNetPremium,asOf:quoteAsOf,source:quoteSource,loading:quoteLoading}=useStrategyQuote({
+    template:selectedStrategy,sym,expiryDays:expiry.days,qty,spot,chain,chainIsLive:chainMode!=="fallback",localLegs,
+  });
+  const [quotedNet,setQuotedNet]=useState<number|null>(null);
+  const quoteMoved=showStrategyConfirm&&quotedNet!==null&&quoteMove(quotedNet,strategyNetPremium)>QUOTE_REQUIRE_RECONFIRM;
+  const quoteLabel=quoteSource==="local"?"local estimate (offline fallback)":quoteSource==="chain"?"chain":"backend";
+  const quoteTime=quoteAsOf?new Date(quoteAsOf).toLocaleTimeString([],{hour12:false}):"—";
   const strategyCollateral=useMemo(()=>pricedLegs.reduce((sum,leg)=>
     leg.action==="sell"?sum+collateralRequired(leg.side,leg.contracts,leg.strike,spot):sum,0
   ),[pricedLegs,spot]);
@@ -175,6 +216,7 @@ function OptionsPageContent() {
             <StrategiesTab sym={sym} expiryDays={expiry.days} spot={spot} marketVol={market.vol} qty={qty}
               onExecuted={()=>setViewTab("positions")}/>
           )}
+          )}
           {viewTab==="surface"&&<SurfaceTab vol={vol} expiryDays={expiry.days}/>}
           <PortfolioBar/>
         </div>
@@ -190,6 +232,67 @@ function OptionsPageContent() {
       </div>
 
       <StatusBar strikes={chain.length}/>
+
+      {showTradeConfirm&&trade&&tradeGreeks&&(
+        <ConfirmDialog
+          title={`${trade.mode==="write"?"Write":"Buy"} ${sym} ${trade.side.toUpperCase()}`}
+          confirmLabel={submitting?"Submitting…":`Confirm ${trade.mode==="write"?"Write":"Buy"}`}
+          onConfirm={execTrade}
+          onCancel={()=>setShowTradeConfirm(false)}
+          disabled={insufficientFunds||notSignedIn||submitting||!!tradeError}
+          disabledReason={tradeError??(insufficientFunds?`Insufficient balance ${trade.mode==="write"?"to post collateral":"to cover premium"}.`:undefined)}
+        >
+          {[
+            ["Strike",fmtK(trade.row.strike)],
+            ["Expiry",expiry.label],
+            ["Contracts",String(qty)],
+            [trade.mode==="write"?"Premium received":"Total premium",`$${fmtN(tradeGreeks.premium*qty,2)}`],
+            ...(trade.mode==="write"?[["Collateral required",`$${fmtN(collateral,2)}`]]:[]),
+          ].map(([k,v])=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
+              <span style={{color:"var(--text-lo)"}}>{k}</span>
+              <span className="num" style={{color:"var(--text-hi)"}}>{v}</span>
+            </div>
+          ))}
+        </ConfirmDialog>
+      )}
+
+      {showStrategyConfirm&&selectedStrategy&&(
+        <ConfirmDialog
+          title={`Execute ${selectedStrategy.name}`}
+          confirmLabel={submitting?"Submitting…":quoteMoved?"Accept new quote":"Confirm Execute"}
+          onConfirm={()=>{if(quoteMoved)setQuotedNet(strategyNetPremium);else execStrategy();}}
+          onCancel={()=>setShowStrategyConfirm(false)}
+          disabled={strategyInsufficientFunds||notSignedIn||submitting||!!tradeError||(quoteLoading&&!quoteMoved)}
+          disabledReason={tradeError??(strategyInsufficientFunds?`Insufficient balance — needs $${fmtN(strategyRequiredFunds,2)}, have $${fmtN(balance,2)}.`:notSignedIn?"Connect your wallet to trade.":undefined)}
+        >
+          {pricedLegs.map((leg,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
+              <span style={{color:leg.action==="buy"?"var(--call)":"var(--put)",textTransform:"uppercase"}}>{leg.action} {leg.side}</span>
+              <span className="num" style={{color:"var(--text-mid)"}}>K={fmtK(leg.strike)}</span>
+              <span className="num" style={{color:"var(--text-hi)"}}>${fmtN(leg.greeks.premium*leg.contracts,2)}</span>
+            </div>
+          ))}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 0",marginTop:6,borderTop:"1px solid var(--border-default)",fontSize:12}}>
+            <span style={{color:"var(--text-lo)"}}>{strategyNetPremium>=0?"Net Debit":"Net Credit"}</span>
+            <span className="num" style={{color:"var(--text-hi)"}}>${fmtN(Math.abs(strategyNetPremium),2)}</span>
+          </div>
+          <div className="num" style={{padding:"4px 0",fontSize:10,color:quoteSource==="local"?"var(--put)":"var(--text-lo)"}}>
+            Quote as of {quoteTime} · {quoteLabel}
+          </div>
+          {quoteMoved&&quotedNet!==null&&(
+            <div style={{margin:"6px 0",padding:"6px 8px",fontSize:11,color:"var(--put)",border:"1px solid var(--put)"}}>
+              Quote moved: net {quotedNet>=0?"debit":"credit"} ${fmtN(Math.abs(quotedNet),2)} → {strategyNetPremium>=0?"debit":"credit"} ${fmtN(Math.abs(strategyNetPremium),2)}. Review and accept the new quote to continue.
+            </div>
+          )}
+          {strategyCollateral>0&&(
+            <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
+              <span style={{color:"var(--text-lo)"}}>Collateral Required</span>
+              <span className="num" style={{color:"var(--text-hi)"}}>${fmtN(strategyCollateral,2)}</span>
+            </div>
+          )}
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { combinedPayoffSeries, type PricedLeg } from "../lib/payoff";
+import type { PricedLeg } from "../lib/payoff";
+import { usePayoffSeries } from "../lib/hooks/usePayoffSeries";
 
 interface Props {
   legs: PricedLeg[];
@@ -15,11 +16,12 @@ export function MultiLegPayoffDiagram({ legs, spot, width = 340, height = 180 }:
   const W = width - PAD.l - PAD.r;
   const H = height - PAD.t - PAD.b;
 
+  const lo = spot * 0.65;
+  const hi = spot * 1.35;
+  const { series, source, loading, fellBack } = usePayoffSeries(legs, lo, hi);
+
   const data = useMemo(() => {
-    const lo = spot * 0.65;
-    const hi = spot * 1.35;
     const range = hi - lo;
-    const series = combinedPayoffSeries(legs, lo, hi);
 
     const maxPnl = series.reduce((m, pt) => Math.max(m, pt.p), 0);
     const minPnl = series.reduce((m, pt) => Math.min(m, pt.p), 0);
@@ -43,10 +45,14 @@ export function MultiLegPayoffDiagram({ legs, spot, width = 340, height = 180 }:
       lo, hi, pathData, profitPath, lossPath, zeroY, spotX: toX(spot), maxPnl, minPnl,
       yLabels: [minPnl, 0, maxPnl].map(v => ({ v, y: toY(v) })),
     };
-  }, [legs, spot, W, H]);
+  }, [series, lo, hi, spot, W, H]);
 
   return (
-    <div style={{ width, height }}>
+    <div style={{ width, height, position: "relative", opacity: loading ? 0.6 : 1, transition: "opacity 150ms" }}>
+      <span title={fellBack ? "Backend payoff unavailable — showing local calculation" : source === "backend" ? "Computed by the backend" : "Local calculation"}
+        style={{ position: "absolute", top: 0, right: 0, fontSize: 8, fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.08em", color: fellBack ? "var(--put)" : "var(--text-lo)" }}>
+        {source === "backend" ? "backend" : fellBack ? "local (fallback)" : "local"}
+      </span>
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         <defs>
           <clipPath id="ml-chart-clip"><rect x={PAD.l} y={PAD.t} width={W} height={H} /></clipPath>

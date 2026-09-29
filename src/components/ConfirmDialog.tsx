@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useOnline } from "../lib/hooks/useOnline";
 
 interface Props {
   title: string;
@@ -12,7 +13,10 @@ interface Props {
   children: React.ReactNode;
 }
 
-export function ConfirmDialog({ title, confirmLabel, onConfirm, onCancel, disabled, disabledReason, children }: Props) {
+export function ConfirmDialog({ title, confirmLabel, onConfirm, onCancel, disabled: disabledProp, disabledReason: reasonProp, children }: Props) {
+  const online = useOnline();
+  const disabled = disabledProp || !online;
+  const disabledReason = !online ? "You are offline — trading is disabled." : reasonProp;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
