@@ -9,6 +9,7 @@ import { Toaster } from "../components/toast/Toaster";
 import { ContractErrorOverlay } from "../components/ContractErrorOverlay";
 import { QueryProvider } from "../components/QueryProvider";
 import { SpotFeedProvider } from "../lib/context/SpotFeedContext";
+import { CommandLayer } from "../components/command/CommandLayer";
 
 const fraunces = Fraunces({
   subsets: ["latin"], weight: ["400","500","600","700"],
@@ -43,7 +44,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ContractErrorOverlay />
         <QueryProvider>
           <SpotFeedProvider>
-            <BackendDataProvider>{children}</BackendDataProvider>
+            <BackendDataProvider>
+              <CommandLayer>{children}</CommandLayer>
+            </BackendDataProvider>
             <PwaShell />
           </SpotFeedProvider>
         </QueryProvider>

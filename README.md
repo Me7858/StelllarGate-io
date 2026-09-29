@@ -47,6 +47,7 @@ preview chain and the options chain's client-side BS fallback will render.
 ```bash
 npm run build   # production build
 npm run lint     # next lint
+npm test         # vitest unit tests
 ```
 
 ## Pages
@@ -54,14 +55,13 @@ npm run lint     # next lint
 | Route | What's there |
 |---|---|
 | `/` | Marketing/landing page, live preview chain, watchlist |
-| `/options` | The terminal: chain, positions, strategy builder, vol surface |
-| `/portfolio` | Open positions marked-to-market, roll, close, CSV export, portfolio-wide risk panel |
+| `/options` | The terminal: chain, positions, strategy builder, vol surface, customizable workspace (≥1024px) |
+| `/portfolio` | Open positions marked-to-market, partial/batch/strategy close, roll, CSV export, portfolio risk |
 | `/history` | Full trade ledger (opens + closes) with realized P&L stats |
 
-The `/options` page is tabbed:
+The `/options` page is tabbed below 1024px (and via the Tabs toggle):
 
-- **Chain** — live options chain for XLM/BTC/ETH/SOL. Click an ask to buy, a
-  bid to write (sell) and collect premium.
+- **Chain** — configurable columns, strike windows (±N / delta), ATM jump, optional dual-expiry compare. Click an ask to buy, a bid to write.
 - **Positions** — quick view of open positions for the selected symbol;
   "Manage →" links to `/portfolio` for the actual close/roll actions.
 - **Strategies** — templated multi-leg trades (straddle, bull call spread,
@@ -69,6 +69,28 @@ The `/options` page is tabbed:
   atomically.
 - **Surface** — an IV heatmap across strikes and expiries, with a simple
   term-structure model (skew dampens for longer-dated options).
+
+On wide viewports, **Workspace** mode (react-grid-layout) lets you drag/resize
+panels (chain, ticket, payoff, spot, smile, positions, alerts, surface,
+strategies), apply Trader / Vol / Writer presets, and save/export/import
+layouts per wallet.
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `⌘/Ctrl+K` or `/` | Command palette (fuzzy search; recent commands) |
+| `?` | Shortcut help overlay |
+| `1`–`4` | Chain / Positions / Strategies / Surface tabs |
+| `[` / `]` | Previous / next expiry |
+| `B` / `S` | Open buy / write ticket on focused strike (confirm still required) |
+| `A` | Jump to ATM |
+| `⇧P` / `⇧H` / `⇧O` | Portfolio / History / Options |
+
+Hotkeys are disabled inside text inputs. Bindings persist in
+`localStorage` (`zenith.hotkeys.v1`). Palette commands like "BTC 30D",
+"buy call", "go portfolio", "toggle surface" are registered via
+`src/components/command/registry.ts`.
 
 ## Architecture
 
@@ -82,36 +104,24 @@ tabs, spot, expiries), `MarketSidebar`, `ViewTabs`, `ChainTable` +
 ```
 src/
 ├── app/                  # Next.js App Router pages
-│   ├── layout.tsx        # Mounts SpotFeedProvider + BackendDataProvider at the root
+│   ├── layout.tsx        # SpotFeed + BackendData + CommandLayer
 │   ├── page.tsx          # Home
-│   ├── options/          # Chain / Positions / Strategies / Surface
-│   ├── portfolio/        # Open positions, roll, close
+│   ├── options/          # Chain / Positions / Strategies / Surface / Workspace
+│   ├── portfolio/        # Partial, batch, strategy close + roll
 │   └── history/          # Trade ledger
-├── components/           # UI components (charts, dialogs, header, etc.)
+├── components/
+│   └── command/          # Command palette, hotkeys, help overlay
+├── features/
+│   ├── chain/            # AdvancedChain + column/strike-window utils
+│   └── workspace/        # Grid layouts, presets, persistence
 └── lib/
-    ├── api/              # Typed backend client: one file per domain
-    │   ├── client.ts     # fetchJson + wsUrl(), NEXT_PUBLIC_API_URL, bearer auth header
-    │   ├── market.ts, positions.ts, watchlist.ts, alerts.ts, history.ts,
-    │   │   strategies.ts, auth.ts, ws.ts, payoff.ts (client exists, unused)
-    │   └── types.ts      # Response shapes mirroring the backend's
-    ├── hooks/             # useBackend{Account,Positions,Watchlist,Alerts,History},
-    │                      # useSpotFeed (WS reconnect w/ backoff)
+    ├── api/              # Typed backend client (+ close feature detection)
+    ├── close/            # Partial P&L math + batch executor
+    ├── hooks/            # useBackend* including closeBatch / closeStrategyGroup
     ├── context/
-    │   ├── BackendDataContext.tsx  # one shared account/positions/watchlist/alerts instance
-    │   └── SpotFeedContext.tsx     # one shared WebSocket connection app-wide
-    ├── store/             # zustand + persist — now just wallet.ts (connect,
-    │                      # sign-in-with-backend, bearer token)
-    ├── pricing.ts        # Black-Scholes, vol smile — fallback/preview layer, see above
-    ├── collateral.ts     # Collateral requirements (100% calls, 110% puts)
-    ├── payoff.ts          # Multi-leg combined payoff math (local; backend equivalent unused)
-    ├── risk.ts             # Whole-portfolio risk: groups all open positions per
-    │                       # underlying into one payoff curve, stress-tests the
-    │                       # account across a spot-shock grid
-    ├── volSurface.ts      # Term-structure-aware IV surface grid
-    ├── strategies.ts      # Multi-leg strategy templates
-    ├── csv.ts / notify.ts # CSV export, browser Notification wrapper
-    ├── useHydrated.ts     # SSR-hydration-safety hook (see below) — still relevant for wallet.ts
-    └── usePriceHistory.ts # In-memory spot sparkline buffer
+    ├── store/            # wallet.ts only
+    ├── pricing.ts
+    └── …
 ```
 
 ### A note on hydration safety
@@ -126,14 +136,23 @@ HTML didn't have. `BackendDataProvider` (`src/lib/context/BackendDataContext.tsx
 gates on `useHydrated()` and only passes the real token down to
 `useBackendAccount`/`useBackendPositions`/etc. once hydrated — everything
 else in `src/app/options/page.tsx` and `src/app/history/page.tsx` that
-reads wallet-gated state follows the same pattern. If you add a new
-component that reads the wallet token to fetch or render backend data, it
-needs the same guard.
+reads wallet-gated state follows the same pattern. Workspace layouts also
+render the Trader preset on SSR and hydrate from localStorage after mount.
+
+## Close API contract (frontend)
+
+Until the backend ships support, the client probes `GET /api/v1/features`
+and falls back:
+
+- `POST /api/v1/positions/{id}/close` with optional `{ contracts }` for partial close
+- `POST /api/v1/strategies/{id}/close` for atomic strategy unwind
+- Sequential per-leg closes with progress + stop/continue when unsupported
+  (non-atomic leg risk is warned in the confirm dialog)
 
 ## Known gaps
 
 - PWA: hand-written `public/sw.js` (no Serwist/Workbox dependency), production-only registration, SVG icons only (no PNG set), no Playwright offline tests and no Lighthouse run yet. Only last-known public spot prices are snapshotted (IndexedDB, wiped on disconnect); positions/account are not cached.
-- No test suite.
+- Playwright e2e keyboard/drag flows are not in CI yet; unit coverage is via vitest.
 - No on-chain/Soroban integration — the backend is a paper-trading API, not
   a wallet transaction signer against the contracts.
 - Wallet sign-in (`signBlob` → verify → bearer token) hasn't been manually
@@ -148,6 +167,9 @@ needs the same guard.
   pricing (before execution) is also local-only, not backend-priced.
 - `src/app/options/page.tsx` is now a composition shell; feature modules live
   in `src/app/options/_components/` (see Options module map above).
+- The home page's preview chain still runs its own local random-walk spot
+  simulation rather than the shared WebSocket feed — only its watchlist is
+  backend-real.
 - Accessibility is minimal — several controls (star toggle, alert form,
   contracts stepper) have no `aria-label`.
 
