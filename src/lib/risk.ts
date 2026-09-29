@@ -15,6 +15,7 @@ export function positionsToLegs(positions: Position[]): PricedLeg[] {
     action: p.position_type === "short" ? "sell" : "buy",
     strike: p.strike,
     contracts: p.contracts,
+    expiryDays: p.expiry_days,
     greeks: { premium: p.entry_premium, delta: 0, gamma: 0, theta: 0, vega: 0, iv: 0 },
   }));
 }
@@ -79,9 +80,9 @@ export interface StressResult {
   byUnderlying: Record<string, number>;
 }
 
-// P&L is intrinsic-value-at-expiry, same simplification the existing
-// combined payoff diagram already makes — this is "if everything ran to
-// expiry from here," not a mark-to-market repricing of live premium.
+// Default stress P&L is still intrinsic-at-expiry (shock the spot, run to
+// expiry). For live mark-to-model curves see markToModelPnl in payoff.ts
+// and the time-aware controls on MultiLegPayoffDiagram / PortfolioRiskPanel.
 export function stressTestPortfolio(positions: Position[], spots: Record<string, number>): StressResult[] {
   const groups = groupPositionsByUnderlying(positions);
   return STRESS_SHOCKS.map(shock => {

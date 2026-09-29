@@ -50,7 +50,7 @@ export function PortfolioRiskPanel({ positions, spots }: Props) {
       <div style={{ display: "flex", gap: 24, padding: 16, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 10, color: "var(--text-lo)", marginBottom: 8 }}>
-            Combined payoff at expiry · {activeUnderlying} · all open legs
+            Mark-to-model payoff · {activeUnderlying} · today / T+n / expiry
           </div>
           <MultiLegPayoffDiagram legs={legs} spot={spot} width={420} height={200} />
         </div>
