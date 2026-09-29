@@ -9,6 +9,7 @@ import { Toaster } from "../components/toast/Toaster";
 import { ContractErrorOverlay } from "../components/ContractErrorOverlay";
 import { QueryProvider } from "../components/QueryProvider";
 import { SpotFeedProvider } from "../lib/context/SpotFeedContext";
+import { NetworkMismatchBanner } from "../components/NetworkMismatchBanner";
 import { SorobanEventBridge } from "../components/SorobanEventBridge";
 import { CommandLayer } from "../components/command/CommandLayer";
 
@@ -54,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <SpotFeedProvider>
             <BackendDataProvider>
+              <NetworkMismatchBanner />
               <SorobanEventBridge>
                 <CommandLayer>{children}</CommandLayer>
               </SorobanEventBridge>
