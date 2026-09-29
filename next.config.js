@@ -4,6 +4,14 @@ const { withSentryConfig } = require("@sentry/nextjs");
 const nextConfig = {
   output: "standalone",
 
+  // Next.js 15: fetch is no longer cached by default (changed from force-cache
+  // to no-store). The app uses the client-side fetch wrapper in
+  // src/lib/api/client.ts which always runs in the browser, so this doesn't
+  // affect existing behaviour — but new server components should opt-in to
+  // caching explicitly rather than relying on defaults.
+  //
+  // Reference: https://nextjs.org/docs/app/building-your-application/caching
+
   // Expose a small set of build-time defaults that can be overridden at
   // runtime via /api/runtime-config.  Any NEXT_PUBLIC_* var baked in here
   // is just a fallback; the client SDK always fetches the live values first.
