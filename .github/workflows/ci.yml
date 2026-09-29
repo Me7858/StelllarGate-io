@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-lint:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          # Sentry source map upload — only runs on main/tags where the
+          # auth token is available; on PRs from forks these will be empty
+          # and the build proceeds without uploading maps.
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          # Release tied to git SHA for release-health tracking.
+          NEXT_PUBLIC_SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_RELEASE: ${{ github.sha }}
+        run: npm run build
+
+      # Source maps are uploaded by @sentry/nextjs during `next build`.
+      # After the build, delete them from the artefacts so they are never
+      # publicly served (hideSourceMaps in next.config.js also does this,
+      # but belt-and-suspenders here for CI artefact uploads).
+      - name: Remove source maps from artefacts
+        if: always()
+        run: find .next -name "*.map" -delete
