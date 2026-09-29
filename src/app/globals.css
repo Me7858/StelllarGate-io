@@ -183,3 +183,7 @@
     .stats-row > div { padding-right: 20px !important; margin-right: 20px !important; }
   }
 }
+
+@keyframes zn-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.zn-toast { animation: zn-toast-in 150ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .zn-toast { animation: none; } }

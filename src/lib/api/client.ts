@@ -17,11 +17,48 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit, token?: string | null, schema?: Schema<T>): Promise<T> {
+/**
+ * Injected by the wallet store (keeps this layer from importing it and
+ * creating a cycle). Resolves to a fresh token, or null if the user
+ * rejected / re-auth failed.
+ */
+type UnauthorizedHandler = () => Promise<string | null>;
+let onUnauthorized: UnauthorizedHandler | null = null;
+let reauthInFlight: Promise<string | null> | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  onUnauthorized = handler;
+}
+
+/** Single-flight: every concurrent 401 awaits the same re-auth call. */
+function reauthenticate(): Promise<string | null> {
+  if (!onUnauthorized) return Promise.resolve(null);
+  if (!reauthInFlight) {
+    reauthInFlight = onUnauthorized()
+      .catch(() => null)
+      .finally(() => {
+        reauthInFlight = null;
+      });
+  }
+  return reauthInFlight;
+}
+
+async function request<T>(path: string, init: RequestInit, token?: string | null, schema?: Schema<T>, retried = false): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
 
   const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+
+  // Only authed requests are recovered; auth endpoints (nonce/verify) never loop.
+  if (res.status === 401 && token && !retried && !path.startsWith("/api/v1/auth/")) {
+    const fresh = await reauthenticate();
+    if (!fresh) throw new ApiError(401, "Session expired");
+    const method = (init.method ?? "GET").toUpperCase();
+    // Never silently replay non-idempotent calls (open/close/roll): the
+    // session is restored, but the user must re-confirm the action.
+    if (method !== "GET") throw new ApiError(401, "Session restored — please confirm and retry this action");
+    return request<T>(path, init, fresh, true);
+  }
 
   if (!res.ok) {
     let message = res.statusText || `request failed with ${res.status}`;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "./Logo";
 import { useBackendData } from "../lib/context/BackendDataContext";
+import { FeedStatusPill } from "./FeedStatus";
 import { fmtN } from "../lib/pricing";
 
 const TABS = [
@@ -54,6 +55,9 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
           <span className="num" style={{ fontSize: 10, color: "var(--atm)" }}>(${fmtN(collateralLocked,2)} locked)</span>
         )}
       </Link>
+      <div style={{ width: 1, height: 20, background: "var(--border-default)" }} />
+
+      <FeedStatusPill />
       <div style={{ width: 1, height: 20, background: "var(--border-default)" }} />
 
       {children}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppHeader } from "../../components/AppHeader";
 import { WalletConnect } from "../../components/WalletConnect";
 import { useBackendData } from "../../lib/context/BackendDataContext";
+import { ProvenanceBadge, useSpotProvenance } from "../../components/FeedStatus";
 import { useSpotFeedContext } from "../../lib/context/SpotFeedContext";
 import { useWalletStore } from "../../lib/store/wallet";
 import { ApiError } from "../../lib/api/client";
@@ -38,6 +39,7 @@ export default function PortfolioPage() {
   // connection covers every underlying, so marking every open position
   // to market doesn't need its own per-symbol subscription or poll.
   const { data: spotFeed } = useSpotFeedContext();
+  const prov = useSpotProvenance();
   const spots = spotFeed?.prices ?? Object.fromEntries(MARKETS.map(m => [m.sym, m.price]));
   const vols = spotFeed?.vols ?? Object.fromEntries(MARKETS.map(m => [m.sym, m.vol]));
 
@@ -169,6 +171,7 @@ export default function PortfolioPage() {
       <AppHeader>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:5,height:5,borderRadius:"50%",background:"var(--call)"}}/>
+          <ProvenanceBadge source={prov.source} asOf={prov.asOf}/>
           <span style={{fontSize:10,color:"var(--text-lo)"}}>Marked to market · Stellar Testnet</span>
           <div style={{width:1,height:16,background:"var(--border-default)",margin:"0 8px"}}/>
           <WalletConnect />
