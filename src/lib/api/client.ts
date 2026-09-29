@@ -6,7 +6,33 @@ import { ContractError, reportContractError } from "./contractError";
 
 type Schema<T> = z.ZodType<T, z.ZodTypeDef, unknown>;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
+import { activeStellarNetwork, env } from "../../env";
+
+interface RuntimeConfig {
+  apiUrl: string;
+  network: "testnet" | "mainnet";
+  rpcUrl: string;
+  passphrase: string;
+  contractId: string | null;
+}
+
+let runtimeConfigPromise: Promise<RuntimeConfig> | undefined;
+
+export function getRuntimeConfig(): Promise<RuntimeConfig> {
+  runtimeConfigPromise ??= typeof window === "undefined"
+    ? Promise.resolve({
+        apiUrl: env.NEXT_PUBLIC_API_URL,
+        network: env.NEXT_PUBLIC_STELLAR_NETWORK,
+        rpcUrl: activeStellarNetwork.rpcUrl,
+        passphrase: activeStellarNetwork.passphrase,
+        contractId: activeStellarNetwork.contractId ?? null,
+      })
+    : fetch("/api/runtime-config", { cache: "no-store" }).then((response) => {
+        if (!response.ok) throw new Error(`Runtime config request failed (${response.status})`);
+        return response.json() as Promise<RuntimeConfig>;
+      });
+  return runtimeConfigPromise;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -47,7 +73,8 @@ async function request<T>(path: string, init: RequestInit, token?: string | null
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const { apiUrl } = await getRuntimeConfig();
+  const res = await fetch(`${apiUrl}${path}`, { ...init, headers });
 
   // Only authed requests are recovered; auth endpoints (nonce/verify) never loop.
   if (res.status === 401 && token && !retried && !path.startsWith("/api/v1/auth/")) {
@@ -108,6 +135,7 @@ export function apiDelete<T>(path: string, token?: string | null): Promise<T> {
   return request<T>(path, { method: "DELETE" }, token);
 }
 
-export function wsUrl(path: string): string {
-  return `${API_BASE_URL.replace(/^http/, "ws")}${path}`;
+export async function wsUrl(path: string): Promise<string> {
+  const { apiUrl } = await getRuntimeConfig();
+  return `${apiUrl.replace(/^http/, "ws")}${path}`;
 }

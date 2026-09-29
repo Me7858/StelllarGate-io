@@ -34,10 +34,17 @@ the payoff diagram still uses local math (`src/lib/payoff.ts`).
 
 ```bash
 npm install
-cp .env.local.example .env.local   # NEXT_PUBLIC_API_URL, defaults to http://localhost:8081
+cp .env.local.example .env.local
 npm run dev
 # http://localhost:3000
 ```
+
+Configuration is validated in `src/env.ts`. Local development defaults to the
+backend at `http://localhost:8081`; production builds require an API URL,
+selected Stellar network, and a valid contract ID for that network. The
+runtime `/api/runtime-config` endpoint lets the same tagged image use separate
+staging and production settings. See [RELEASING.md](RELEASING.md) for release,
+deployment, and rollback setup.
 
 Run the [backend](https://github.com/Zenith-options/backend) alongside it
 (`cargo run`, default port 8081) for account/positions/history/watchlist/

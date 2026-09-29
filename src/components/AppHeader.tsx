@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "./Logo";
+import { AboutPanel } from "./AboutPanel";
 import { useBackendData } from "../lib/context/BackendDataContext";
 import { fmtN } from "../lib/pricing";
 
@@ -58,6 +59,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
       <div style={{ width: 1, height: 20, background: "var(--border-default)" }} />
 
       {children}
+      <AboutPanel />
     </header>
   );
 }
