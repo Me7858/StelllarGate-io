@@ -12,10 +12,12 @@ import type { Account } from "../api/types";
 interface BackendData {
   account: Account | null;
   accountLoading: boolean;
+  accountError: unknown;
   refreshAccount: () => void;
   positions: ReturnType<typeof useBackendPositions>["positions"];
   greeks: ReturnType<typeof useBackendPositions>["greeks"];
   positionsLoading: boolean;
+  positionsError: unknown;
   refreshPositions: () => void;
   open: ReturnType<typeof useBackendPositions>["open"];
   openStrategy: ReturnType<typeof useBackendPositions>["openStrategy"];
@@ -23,10 +25,12 @@ interface BackendData {
   roll: ReturnType<typeof useBackendPositions>["roll"];
   watchlist: ReturnType<typeof useBackendWatchlist>["items"];
   watchlistLoading: boolean;
+  watchlistError: unknown;
   addToWatchlist: ReturnType<typeof useBackendWatchlist>["add"];
   removeFromWatchlist: ReturnType<typeof useBackendWatchlist>["remove"];
   alerts: ReturnType<typeof useBackendAlerts>["alerts"];
   alertsLoading: boolean;
+  alertsError: unknown;
   addAlert: ReturnType<typeof useBackendAlerts>["add"];
   removeAlert: ReturnType<typeof useBackendAlerts>["remove"];
 }
@@ -34,7 +38,9 @@ interface BackendData {
 const BackendDataContext = createContext<BackendData | null>(null);
 
 /**
- * Single shared instance of the account/positions/watchlist/alerts hooks,
+ * Thin compatibility shim over the TanStack Query hooks (the query cache
+ * now does the sharing/invalidation; mutations invalidate account too).
+ * Originally: single shared instance of the account/positions/watchlist/alerts hooks,
  * mounted once at the root — every consumer (AppHeader's balance chip,
  * StarButton, AlertsPanel, the options and portfolio pages) reads the
  * same state instead of each running its own independent fetch. That
@@ -52,49 +58,25 @@ export function BackendDataProvider({ children }: { children: React.ReactNode })
   // itself rehydrates.
   const effectiveToken = hydrated ? token : null;
 
-  const { account, loading: accountLoading, refresh: refreshAccount } = useBackendAccount(effectiveToken);
+  const { account, loading: accountLoading, error: accountError, refresh: refreshAccount } = useBackendAccount(effectiveToken);
   const {
-    positions, greeks, loading: positionsLoading, refresh: refreshPositions,
+    positions, greeks, loading: positionsLoading, error: positionsError, refresh: refreshPositions,
     open, openStrategy, close, roll,
   } = useBackendPositions(effectiveToken);
   const {
-    items: watchlist, loading: watchlistLoading,
+    items: watchlist, loading: watchlistLoading, error: watchlistError,
     add: addToWatchlist, remove: removeFromWatchlist,
   } = useBackendWatchlist(effectiveToken);
-  const { alerts, loading: alertsLoading, add: addAlert, remove: removeAlert } = useBackendAlerts(effectiveToken);
-
-  // Every position mutation changes the account balance/collateral too —
-  // refresh it here rather than trusting every call site to remember to.
-  const openAndRefreshAccount: typeof open = async (params) => {
-    const result = await open(params);
-    refreshAccount();
-    return result;
-  };
-  const openStrategyAndRefreshAccount: typeof openStrategy = async (legs) => {
-    const result = await openStrategy(legs);
-    refreshAccount();
-    return result;
-  };
-  const closeAndRefreshAccount: typeof close = async (id) => {
-    const result = await close(id);
-    refreshAccount();
-    return result;
-  };
-  const rollAndRefreshAccount: typeof roll = async (id, params) => {
-    const result = await roll(id, params);
-    refreshAccount();
-    return result;
-  };
+  const { alerts, loading: alertsLoading, error: alertsError, add: addAlert, remove: removeAlert } = useBackendAlerts(effectiveToken);
 
   return (
     <BackendDataContext.Provider
       value={{
-        account, accountLoading, refreshAccount,
-        positions, greeks, positionsLoading, refreshPositions,
-        open: openAndRefreshAccount, openStrategy: openStrategyAndRefreshAccount,
-        close: closeAndRefreshAccount, roll: rollAndRefreshAccount,
-        watchlist, watchlistLoading, addToWatchlist, removeFromWatchlist,
-        alerts, alertsLoading, addAlert, removeAlert,
+        account, accountLoading, accountError, refreshAccount,
+        positions, greeks, positionsLoading, positionsError, refreshPositions,
+        open, openStrategy, close, roll,
+        watchlist, watchlistLoading, watchlistError, addToWatchlist, removeFromWatchlist,
+        alerts, alertsLoading, alertsError, addAlert, removeAlert,
       }}
     >
       {children}

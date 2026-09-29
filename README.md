@@ -72,6 +72,13 @@ The `/options` page is tabbed:
 
 ## Architecture
 
+Options module map (`src/app/options/_components/`): `MarketHeader` (symbol
+tabs, spot, expiries), `MarketSidebar`, `ViewTabs`, `ChainTable` +
+`useOptionChain` (fetch, 4s polling, Black-Scholes fallback), `TradeTicket` +
+`useTradeTicket` (validation, collateral, funds), `PositionsTab`,
+`StrategiesTab` + `useStrategyPreview`, `SurfaceTab`, `PortfolioBar`,
+`StatusBar`. `page.tsx` only composes them.
+
 ```
 src/
 ├── app/                  # Next.js App Router pages
@@ -138,12 +145,20 @@ needs the same guard.
 - The home page's preview chain still runs its own local random-walk spot
   simulation rather than the shared WebSocket feed — only its watchlist is
   backend-real.
-- `src/app/options/page.tsx` has grown large (chain + positions + strategies
-  + surface + both trade panels + confirm dialogs) — a good candidate to
-  split into sub-components before adding much more to it.
+- `src/app/options/page.tsx` is now a composition shell; feature modules live
+  in `src/app/options/_components/` (see Options module map above).
 - Accessibility is minimal — several controls (star toggle, alert form,
   contracts stepper) have no `aria-label`.
 
 ## License
 
 MIT © Zenith Protocol Contributors
+
+## API contracts
+
+`src/lib/api/schemas.ts` holds a Zod schema per backend response; types in
+`types.ts` are `z.infer`-derived. `request()` validates each response and throws
+a `ContractError` (with per-field paths) on drift: shown in a dev overlay, sent
+to `NEXT_PUBLIC_MONITOR_URL` in production. Extra backend fields are stripped;
+numeric strings are coerced. `npm run api:check` validates the fixtures in
+`contracts/fixtures/` (named after schema exports) and flags key drift.

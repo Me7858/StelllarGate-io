@@ -1,33 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getAccount } from "../api/positions";
-import type { Account } from "../api/types";
+import { queryKeys } from "../api/queryKeys";
 
 /**
  * Account balance/collateral from the backend. `token` should be `null`
  * whenever the caller hasn't finished its own hydration-safety check —
- * passing a token before that point risks fetching (and rendering) data
- * the server-rendered HTML didn't have, which is exactly the mismatch
- * the useHydrated() pattern documented in the README exists to avoid.
+ * the query is disabled until then, so nothing is fetched or rendered that
+ * the server-rendered HTML didn't have (see useHydrated in the README).
+ * Failures surface as `error` rather than a silent null account.
  */
 export function useBackendAccount(token: string | null) {
-  const [account, setAccount] = useState<Account | null>(null);
-  const [loading, setLoading] = useState(false);
-
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: queryKeys.account(token),
+    queryFn: () => getAccount(token as string),
+    enabled: !!token,
+  });
   const refresh = useCallback(() => {
-    if (!token) {
-      setAccount(null);
-      return;
-    }
-    setLoading(true);
-    getAccount(token)
-      .then(setAccount)
-      .catch(() => setAccount(null))
-      .finally(() => setLoading(false));
-  }, [token]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return { account, loading, refresh };
+    qc.invalidateQueries({ queryKey: queryKeys.account(token) });
+  }, [qc, token]);
+  return { account: token ? q.data ?? null : null, loading: q.isFetching, error: q.error, refresh };
 }

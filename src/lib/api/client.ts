@@ -1,6 +1,10 @@
-// Thin fetch wrapper for the zenith-backend API. No caching/retry layer —
-// callers (stores, components) own their own loading/error state, this
-// just standardizes the request/error shape.
+// Thin fetch wrapper for the zenith-backend API. Caching/retry live in
+// TanStack Query; this standardizes the request/error shape and, when a
+// schema is passed, validates the response at runtime (ContractError).
+import type { z } from "zod";
+import { ContractError, reportContractError } from "./contractError";
+
+type Schema<T> = z.ZodType<T, z.ZodTypeDef, unknown>;
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
@@ -13,7 +17,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit, token?: string | null): Promise<T> {
+async function request<T>(path: string, init: RequestInit, token?: string | null, schema?: Schema<T>): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
 
@@ -35,14 +39,22 @@ async function request<T>(path: string, init: RequestInit, token?: string | null
   // (easy to miss one), so just check whether there's actually anything
   // to parse instead.
   const text = await res.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  const body = text ? JSON.parse(text) : undefined;
+  if (!schema) return body as T;
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    const err = new ContractError(path, parsed.error.issues);
+    reportContractError(err);
+    throw err;
+  }
+  return parsed.data;
 }
 
-export function apiGet<T>(path: string, token?: string | null): Promise<T> {
-  return request<T>(path, { method: "GET" }, token);
+export function apiGet<T>(path: string, token?: string | null, schema?: Schema<T>): Promise<T> {
+  return request<T>(path, { method: "GET" }, token, schema);
 }
 
-export function apiPost<T>(path: string, body?: unknown, token?: string | null): Promise<T> {
+export function apiPost<T>(path: string, body?: unknown, token?: string | null, schema?: Schema<T>): Promise<T> {
   return request<T>(
     path,
     {
@@ -50,7 +62,8 @@ export function apiPost<T>(path: string, body?: unknown, token?: string | null):
       headers: { "content-type": "application/json" },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     },
-    token
+    token,
+    schema
   );
 }
 
