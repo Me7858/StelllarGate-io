@@ -142,6 +142,10 @@ needs the same guard.
 - The home page's preview chain still runs its own local random-walk spot
   simulation rather than the shared WebSocket feed — only its watchlist is
   backend-real.
+- The backend's `/api/v1/portfolio/payoff` endpoint has a typed client
+  (`src/lib/api/payoff.ts`) but nothing calls it — the payoff diagram still
+  computes locally (`src/lib/payoff.ts`). Multi-leg strategy *preview*
+  pricing (before execution) is also local-only, not backend-priced.
 - `src/app/options/page.tsx` is now a composition shell; feature modules live
   in `src/app/options/_components/` (see Options module map above).
 - Accessibility is minimal — several controls (star toggle, alert form,

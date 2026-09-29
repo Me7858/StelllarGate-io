@@ -19,6 +19,8 @@ import { StarButton } from "../../components/StarButton";
 import { SpotPriceChart } from "../../components/SpotPriceChart";
 import { usePriceHistory } from "../../lib/usePriceHistory";
 import { useHydrated } from "../../lib/useHydrated";
+import { parseTerminalUrl, buildShareUrl, type TerminalUrlState, type ViewTab } from "../../lib/urlState";
+import { useUrlState } from "../../lib/useUrlState";
 import { StrategyPicker } from "../../components/StrategyPicker";
 import { MultiLegPayoffDiagram } from "../../components/MultiLegPayoffDiagram";
 import { VolSurfaceHeatmap } from "../../components/VolSurfaceHeatmap";
@@ -26,9 +28,9 @@ import { ChainRow as ChainRowView } from "../../components/ChainRow";
 import { useChainFeed } from "../../lib/hooks/useChainFeed";
 import { useStrategyQuote, quoteMove } from "../../lib/hooks/useStrategyQuote";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { type StrategyTemplate } from "../../lib/strategies";
+import { STRATEGY_TEMPLATES, type StrategyTemplate } from "../../lib/strategies";
+import { netPremium, type PricedLeg } from "../../lib/payoff";
 import type { ChainRowData } from "../../lib/chainRows";
-import { type PricedLeg } from "../../lib/payoff";
 import { useOptionChain, useExpiries } from "./_components/useOptionChain";
 import { MarketHeader } from "./_components/MarketHeader";
 import { MarketSidebar } from "./_components/MarketSidebar";
@@ -57,9 +59,13 @@ export default function OptionsPage() {
 // Composition shell: each feature module owns its own state and data hooks.
 function OptionsPageContent() {
   const params = useSearchParams();
-  const [sym, setSym] = useState(params.get("u")??"XLM");
-  const [expiry, setExpiry] = useState(EXPIRIES[2]);
-  // Live from the shared WebSocket feed; static seed constants when null.
+  const initialUrl = useMemo(()=>parseTerminalUrl(params),[]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [sym, setSym] = useState(initialUrl.u);
+  const [expiry, setExpiry] = useState(EXPIRIES.find(e=>e.days===initialUrl.exp)??EXPIRIES[2]);
+  // Live from the shared WebSocket feed (SpotFeedProvider, mounted at
+  // the root) — null until the first message arrives or if the socket's
+  // still reconnecting, in which case the static seed constants below
+  // are what render instead.
   const { data: spotData } = useSpotFeedContext();
   const prov = useSpotProvenance();
   const [trade, setTrade] = useState<TradeState|null>(null);
@@ -70,9 +76,29 @@ function OptionsPageContent() {
   const vol = spotData?.vols[sym] ?? market.vol;
   const expiries = useExpiries(sym);
   const { chain, loading: chainLoading } = useOptionChain(sym, expiry.days, spot, vol);
-  const [contracts, setContracts] = useState("1");
-  const [viewTab, setViewTab] = useState<"chain"|"positions"|"strategies"|"surface">("chain");
-  const [selectedStrategy, setSelectedStrategy] = useState<StrategyTemplate|null>(null);
+  const priceHistory = usePriceHistory(sym, spot);
+  const [contracts, setContracts] = useState(String(initialUrl.qty));
+  const [viewTab, setViewTab] = useState<ViewTab>(initialUrl.tab);
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyTemplate|null>(
+    STRATEGY_TEMPLATES.find(t=>t.id===initialUrl.strategy)??null);
+  const [focusStrike, setFocusStrike] = useState<number|null>(initialUrl.strike);
+  const urlSnapshot: TerminalUrlState = {
+    u:sym, exp:expiry.days, tab:viewTab, strategy:selectedStrategy?.id??null,
+    qty:Math.max(1,Math.round(parseFloat(contracts)||1)), strike:trade?.row.strike??focusStrike,
+  };
+  useUrlState(urlSnapshot, next=>{
+    setSym(next.u);
+    setExpiry(EXPIRIES.find(e=>e.days===next.exp)??EXPIRIES[2]);
+    setViewTab(next.tab);
+    setSelectedStrategy(STRATEGY_TEMPLATES.find(t=>t.id===next.strategy)??null);
+    setContracts(String(next.qty));
+    setFocusStrike(next.strike);
+  });
+  const [linkCopied, setLinkCopied] = useState(false);
+  const copyLink = () => {
+    const url = buildShareUrl(window.location.origin, window.location.pathname, urlSnapshot);
+    navigator.clipboard?.writeText(url).then(()=>{setLinkCopied(true);setTimeout(()=>setLinkCopied(false),1500)}).catch(()=>{});
+  };
   const [showStrategyConfirm, setShowStrategyConfirm] = useState(false);
   const prevSpotRef = useRef(spot);
 
