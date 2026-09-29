@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AppHeader } from "../../components/AppHeader";
 import { WalletConnect } from "../../components/WalletConnect";
-import { MARKETS, EXPIRIES, bs, smileVol, seededRandom, fmtN, fmtSpot, fmtK, type Greeks } from "../../lib/pricing";
+import { MARKETS, EXPIRIES, bs, smileVol, fmtN, fmtSpot, fmtK, type Greeks } from "../../lib/pricing";
 import { getChain, getExpiryCalendar } from "../../lib/api/market";
 import { ApiError } from "../../lib/api/client";
 import { useBackendData } from "../../lib/context/BackendDataContext";
@@ -14,18 +14,36 @@ import { useWalletStore } from "../../lib/store/wallet";
 import { AlertsPanel } from "../../components/AlertsPanel";
 import { StarButton } from "../../components/StarButton";
 import { SpotPriceChart } from "../../components/SpotPriceChart";
-import { usePriceHistory } from "../../lib/usePriceHistory";
+import { useCandleHistory } from "../../lib/useCandleHistory";
+import type { CandleInterval } from "../../lib/candles";
 import { useHydrated } from "../../lib/useHydrated";
-import { StrategyBuilder } from "../../components/StrategyBuilder";
-import { OrderTicket } from "../../components/OrderTicket";
-import { VolSurfaceHeatmap } from "../../components/VolSurfaceHeatmap";
+import { StrategyPicker } from "../../components/StrategyPicker";
+import { MultiLegPayoffDiagram } from "../../components/MultiLegPayoffDiagram";
+import { VolSurfaceView } from "../../components/VolSurfaceView";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { type StrategyTemplate } from "../../lib/strategies";
 import { netPremium, type PricedLeg } from "../../lib/payoff";
+import { buildChainHeatScales } from "../../lib/heatScale";
+import { HeatCell } from "../../components/HeatCell";
+import { MiniBar } from "../../components/MiniBar";
+import { ChainHeatLegend, type HeatMode } from "../../components/ChainHeatLegend";
+import { StrategyBuilder } from "../../components/StrategyBuilder";
+import { OrderTicket } from "../../components/OrderTicket";
+import { VolSurfaceHeatmap } from "../../components/VolSurfaceHeatmap";
 import { checkPriceProtection } from "../../lib/orderTicket";
 import { VolSmile } from "../../components/VolSmile";
 
-interface ChainRow{strike:number;call:Greeks;put:Greeks;itmCall:boolean;itmPut:boolean;}
+interface ChainRow {
+  strike: number;
+  call: Greeks;
+  put: Greeks;
+  itmCall: boolean;
+  itmPut: boolean;
+  callVolume: number | null;
+  putVolume: number | null;
+  callOi: number | null;
+  putOi: number | null;
+}
 interface TradeState{row:ChainRow;side:"call"|"put";mode:"buy"|"write";}
 
 export default function OptionsPage() {
@@ -58,6 +76,10 @@ function OptionsPageContent() {
   const market = MARKETS.find(m=>m.sym===sym)??MARKETS[0];
   const spot = spotData?.prices[sym] ?? market.price;
   const vol = spotData?.vols[sym] ?? market.vol;
+  const [candleTf, setCandleTf] = useState<CandleInterval>("1m");
+  const { candles, limitedHistory } = useCandleHistory(sym, spot, candleTf);
+  const [heatMode, setHeatMode] = useState<HeatMode>("off");
+  const [contracts, setContracts] = useState("1");
   const priceHistory = usePriceHistory(sym, spot);
   const [viewTab, setViewTab] = useState<"chain"|"positions"|"strategies"|"surface">("chain");
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyTemplate|null>(null);
@@ -110,6 +132,10 @@ function OptionsPageContent() {
         call:{premium:e.call.premium,delta:e.call.delta,gamma:e.call.gamma,theta:e.call.theta,vega:e.call.vega,iv:e.call.iv},
         put:{premium:e.put.premium,delta:e.put.delta,gamma:e.put.gamma,theta:e.put.theta,vega:e.put.vega,iv:e.put.iv},
         itmCall:e.is_itm_call,itmPut:e.is_itm_put,
+        callVolume: e.call_volume ?? null,
+        putVolume: e.put_volume ?? null,
+        callOi: e.call_open_interest ?? null,
+        putOi: e.put_open_interest ?? null,
       })));
     }).catch(()=>{
       // Backend unreachable — fall back to the local Black-Scholes calc
@@ -120,7 +146,8 @@ function OptionsPageContent() {
         const strike=Math.round(spot*(1+n*0.04)*10000)/10000;
         const v=smileVol(vol,strike/spot);
         return{strike,call:bs(spot,strike,v,t,true),put:bs(spot,strike,v,t,false),
-          itmCall:spot>strike,itmPut:spot<strike};
+          itmCall:spot>strike,itmPut:spot<strike,
+          callVolume:null,putVolume:null,callOi:null,putOi:null};
       }));
     }).finally(()=>{if(!cancelled)setChainLoading(false);});
     return ()=>{cancelled=true;};
@@ -138,6 +165,10 @@ function OptionsPageContent() {
           call:{premium:e.call.premium,delta:e.call.delta,gamma:e.call.gamma,theta:e.call.theta,vega:e.call.vega,iv:e.call.iv},
           put:{premium:e.put.premium,delta:e.put.delta,gamma:e.put.gamma,theta:e.put.theta,vega:e.put.vega,iv:e.put.iv},
           itmCall:e.is_itm_call,itmPut:e.is_itm_put,
+          callVolume: e.call_volume ?? null,
+          putVolume: e.put_volume ?? null,
+          callOi: e.call_open_interest ?? null,
+          putOi: e.put_open_interest ?? null,
         })));
       }).catch(()=>{/* keep showing the last known chain */});
     },4000);
@@ -163,6 +194,62 @@ function OptionsPageContent() {
 
   const atmIdx=chain.findIndex(r=>!r.itmCall);
   const tradeGreeks=trade?(trade.side==="call"?trade.row.call:trade.row.put):null;
+
+  const heatScales = useMemo(() => buildChainHeatScales(chain.map(r => ({
+    callIv: r.call.iv,
+    putIv: r.put.iv,
+    callDelta: r.call.delta,
+    putDelta: r.put.delta,
+    callTheta: r.call.theta,
+    putTheta: r.put.theta,
+    callVolume: r.callVolume,
+    putVolume: r.putVolume,
+    callOi: r.callOi,
+    putOi: r.putOi,
+  }))), [chain]);
+
+  const openStrikes = useMemo(
+    () => backendPositions.filter(p => p.underlying === sym).map(p => p.strike),
+    [backendPositions, sym]
+  );
+
+  const qty=Math.max(0.01,parseFloat(contracts)||1);
+
+  // Strategy leg pricing still uses the local bs()/smileVol() calc (with
+  // the static seed vol, not the live-polled one) rather than a backend
+  // round trip per leg — out of scope for this pass, which only moved
+  // the chain table and spot ticker over. Premiums here won't always
+  // match a leg's corresponding chain row exactly once vol has drifted
+  // from its seed value.
+  const pricedLegs=useMemo(():PricedLeg[]=>{
+    if(!selectedStrategy)return[];
+    return selectedStrategy.legs.map(leg=>{
+      const strike=Math.round(spot*leg.strikeOffset*10000)/10000;
+      const legVol=smileVol(market.vol,leg.strikeOffset);
+      const greeks=bs(spot,strike,legVol,t,leg.side==="call");
+      return{side:leg.side,action:leg.action,strike,contracts:qty,greeks};
+    });
+  },[selectedStrategy,spot,market.vol,t,qty]);
+
+  const strategyNetPremium=useMemo(()=>netPremium(pricedLegs),[pricedLegs]);
+  const strategyCollateral=useMemo(()=>pricedLegs.reduce((sum,leg)=>
+    leg.action==="sell"?sum+collateralRequired(leg.side,leg.contracts,leg.strike,spot):sum,0
+  ),[pricedLegs,spot]);
+  const strategyRequiredFunds=strategyCollateral+Math.max(0,strategyNetPremium);
+  const strategyInsufficientFunds=pricedLegs.length>0&&balance<strategyRequiredFunds;
+  const collateral=trade&&trade.mode==="write"?collateralRequired(trade.side,qty,trade.row.strike,spot):0;
+  const requiredFunds=trade?(trade.mode==="write"?collateral:(tradeGreeks?.premium??0)*qty):0;
+  const insufficientFunds=balance<requiredFunds;
+
+  const notSignedIn=!token;
+
+  const submitOrderTicket=async(args:{quantity:number;quotedPremium:number;maxSlippageBps:number;limitPrice:number|null})=>{
+    if(!trade||!tradeGreeks)throw new Error("No trade selected");
+    const fillPremium=tradeGreeks.premium;
+    const check=checkPriceProtection(trade.mode,args.quotedPremium,fillPremium,args.maxSlippageBps,args.limitPrice);
+    if(check.ok===false)throw new Error(check.reason);
+    await openBackendPosition({
+      underlying:sym,strike:trad
   const notSignedIn=!token;
 
   const submitOrderTicket=async(args:{quantity:number;quotedPremium:number;maxSlippageBps:number;limitPrice:number|null})=>{
@@ -250,7 +337,15 @@ function OptionsPageContent() {
           overflowY:"auto",padding:"14px 12px",display:"flex",flexDirection:"column",gap:18,
           background:"var(--bg-raised)"}}>
 
-          <SpotPriceChart history={priceHistory} width={212} height={70}/>
+          <SpotPriceChart
+            candles={candles}
+            interval={candleTf}
+            onIntervalChange={setCandleTf}
+            limitedHistory={limitedHistory}
+            atmIv={vol}
+            strikeLines={openStrikes}
+            height={140}
+          />
 
           <VolSmile baseVol={vol} width={212} height={110}/>
 
@@ -330,6 +425,13 @@ function OptionsPageContent() {
                   Loading chain…
                 </div>
               ):(<>
+              <ChainHeatLegend
+                iv={heatScales.iv}
+                absDelta={heatScales.absDelta}
+                theta={heatScales.theta}
+                heatMode={heatMode}
+                onChange={setHeatMode}
+              />
               {/* Headers */}
               <div className="chain-header">
                 {["Vol","OI","Bid","Ask","IV"].map(h=><div key={"c"+h} className="ch call">{h}</div>)}
@@ -340,34 +442,66 @@ function OptionsPageContent() {
               {chain.map((row,i)=>{
                 const isAtm=i===atmIdx;
                 const sp=Math.max(0.00001,row.call.premium*0.003);
-                const vol=Math.round(seededRandom(row.strike*1000)*200+20);
-                const oi=Math.round(seededRandom(row.strike*1000+7)*5000+100);
+                const moneynessShade = Math.min(0.14, Math.abs(row.strike / spot - 1) * 0.4);
+                const heatActive = heatMode !== "off";
+                const callHeatVal =
+                  heatMode === "iv" ? row.call.iv :
+                  heatMode === "delta" ? Math.abs(row.call.delta) :
+                  heatMode === "theta" ? row.call.theta : 0;
+                const putHeatVal =
+                  heatMode === "iv" ? row.put.iv :
+                  heatMode === "delta" ? Math.abs(row.put.delta) :
+                  heatMode === "theta" ? row.put.theta : 0;
+                const heatScale =
+                  heatMode === "iv" ? heatScales.iv :
+                  heatMode === "delta" ? heatScales.absDelta :
+                  heatMode === "theta" ? heatScales.theta : null;
                 return(
                   <div key={row.strike}
                     className={`chain-row${row.itmCall?" itm-call":""}${row.itmPut?" itm-put":""}`}
-                    style={{background:isAtm?"var(--atm-dim)":undefined}}>
-                    <div className="cc">{vol}</div>
-                    <div className="cc">{oi.toLocaleString()}</div>
+                    style={{
+                      background: isAtm
+                        ? "var(--atm-dim)"
+                        : moneynessShade > 0
+                          ? `rgba(181,150,101,${moneynessShade.toFixed(3)})`
+                          : undefined,
+                    }}>
+                    <MiniBar value={row.callVolume} max={heatScales.volumeMax} name="Call volume" />
+                    <MiniBar value={row.callOi} max={heatScales.oiMax} name="Call open interest" />
                     <div className="cc tradeable call" title="Click to write (sell)" onClick={()=>setTrade({row,side:"call",mode:"write"})}>
                       {fmtN(Math.max(0,row.call.premium-sp))}
                     </div>
                     <div className="cc tradeable call" title="Click to buy" onClick={()=>setTrade({row,side:"call",mode:"buy"})}>
                       {fmtN(row.call.premium+sp)}
                     </div>
-                    <div className="cc brand">{(row.call.iv*100).toFixed(1)}</div>
+                    <HeatCell
+                      className="cc brand"
+                      value={callHeatVal}
+                      display={(row.call.iv*100).toFixed(1)}
+                      scale={heatScale}
+                      active={heatActive}
+                      title={`Call IV ${(row.call.iv*100).toFixed(1)}% · Δ ${row.call.delta.toFixed(3)} · Θ ${row.call.theta.toFixed(4)}`}
+                    />
                     <div className={`strike-cell${isAtm?" atm":""}`}>
                       {fmtK(row.strike)}
                       {isAtm&&<div style={{fontSize:7,marginTop:1,opacity:0.6}}>ATM</div>}
                     </div>
-                    <div className="cc brand">{(row.put.iv*100).toFixed(1)}</div>
+                    <HeatCell
+                      className="cc brand"
+                      value={putHeatVal}
+                      display={(row.put.iv*100).toFixed(1)}
+                      scale={heatScale}
+                      active={heatActive}
+                      title={`Put IV ${(row.put.iv*100).toFixed(1)}% · Δ ${row.put.delta.toFixed(3)} · Θ ${row.put.theta.toFixed(4)}`}
+                    />
                     <div className="cc tradeable put" title="Click to buy" onClick={()=>setTrade({row,side:"put",mode:"buy"})}>
                       {fmtN(row.put.premium+sp)}
                     </div>
                     <div className="cc tradeable put" title="Click to write (sell)" onClick={()=>setTrade({row,side:"put",mode:"write"})}>
                       {fmtN(Math.max(0,row.put.premium-sp))}
                     </div>
-                    <div className="cc">{oi.toLocaleString()}</div>
-                    <div className="cc">{vol}</div>
+                    <MiniBar value={row.putOi} max={heatScales.oiMax} name="Put open interest" />
+                    <MiniBar value={row.putVolume} max={heatScales.volumeMax} name="Put volume" />
                   </div>
                 );
               })}
@@ -460,7 +594,18 @@ function OptionsPageContent() {
 
           {viewTab==="surface"&&(
             <div style={{flex:1,overflowY:"auto",padding:16}}>
-              <VolSurfaceHeatmap baseVol={vol} selectedExpiryDays={expiry.days}/>
+              <VolSurfaceView
+                baseVol={vol}
+                selectedExpiryDays={expiry.days}
+                onSelectStrike={(moneyness) => {
+                  const strike = Math.round(spot * moneyness * 10000) / 10000;
+                  const row = chain.find(r => Math.abs(r.strike - strike) / strike < 0.02)
+                    ?? chain.reduce((best, r) =>
+                      Math.abs(r.strike - strike) < Math.abs(best.strike - strike) ? r : best,
+                      chain[0]);
+                  if (row) setTrade({ row, side: "call", mode: "buy" });
+                }}
+              />
             </div>
           )}
 

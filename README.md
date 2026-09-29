@@ -130,15 +130,19 @@ src/
     ├── alertRules.ts     # Client-side alert rule evaluator (hysteresis/cooldown)
     ├── collateral.ts     # Collateral requirements (100% calls, 110% puts)
     ├── payoff.ts          # Multi-leg combined payoff math (local; backend equivalent unused)
-    ├── risk.ts             # Whole-portfolio risk: groups all open positions per
-    │                       # underlying into one payoff curve, stress-tests the
-    │                       # account across a spot-shock grid
-    ├── volSurface.ts      # Term-structure-aware IV surface grid
+    ├── risk.ts             # Whole-portfolio risk + mark-to-model scenarioGrid
+    ├── heatScale.ts       # Colorblind-safe chain heat scales + contrast checks
+    ├── candles.ts         # Tick→OHLC aggregation, SMA/EMA, realized vol
+    ├── volSurface.ts      # Term-structure IV surface grid + WebGL mesh
     ├── strategies.ts      # Multi-leg strategy templates
     ├── csv.ts / notify.ts # CSV export, browser + in-app notifications
     ├── useHydrated.ts     # SSR-hydration-safety hook (see below) — still relevant for wallet.ts
-    └── usePriceHistory.ts # In-memory spot sparkline buffer
+    ├── useCandleHistory.ts # Candle history (API or limited WS seed)
+    └── usePriceHistory.ts # Legacy in-memory spot sparkline buffer
 ```
+
+See also [docs/VISUALIZATIONS.md](docs/VISUALIZATIONS.md) for the chain heat map,
+3D surface, candlestick chart, and scenario analysis features (#40–#43).
 
 ### A note on hydration safety
 
@@ -171,6 +175,8 @@ npm test          # node:test unit suite (attribution, analytics, expiry, alertR
 
 ## Known gaps
 
+- Unit tests cover heat scales, candles, vol-surface mesh, and scenario grid
+  (`npm test`). No Playwright e2e suite yet.
 - No RTL / component test suite yet (pure lib modules are covered).
 - PWA: hand-written `public/sw.js` (no Serwist/Workbox dependency), production-only registration, SVG icons only (no PNG set), no Playwright offline tests and no Lighthouse run yet. Only last-known public spot prices are snapshotted (IndexedDB, wiped on disconnect); positions/account are not cached.
 - Playwright e2e keyboard/drag flows are not in CI yet; unit coverage is via vitest.

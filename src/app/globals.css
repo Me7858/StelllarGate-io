@@ -32,10 +32,13 @@
     --text-mid: #9C9484;
     --text-lo:  #5C5648;
 
-    --font-serif: var(--font-fraunces), Georgia, serif;
-    --font-sans:  var(--font-plex-sans), system-ui, sans-serif;
-    --font-mono:  var(--font-jetbrains-mono), ui-monospace, monospace;
-  }
+    /* Heat-map tokens (ColorBrewer-inspired, theme-swappable) */
+    --heat-seq-lo: #362a14;
+    --heat-seq-hi: #e8d6a8;
+    --heat-div-lo: #b65640;
+    --heat-div-mid: #2c2820;
+    --heat-div-hi: #5c9a6b;
+    --heat-bar:    #b59665;
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -103,6 +106,18 @@
   .cc.brand{ color: var(--brand); }
   .cc.tradeable  { font-weight: 600; color: var(--text-hi); cursor: pointer; }
   .cc.tradeable:hover { color: var(--atm); text-decoration: underline; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 
   .strike-cell {
     font-family: var(--font-mono);
