@@ -56,8 +56,9 @@ npm test         # vitest unit tests
 |---|---|
 | `/` | Marketing/landing page, live preview chain, watchlist |
 | `/options` | The terminal: chain, positions, strategy builder, vol surface, customizable workspace (≥1024px) |
-| `/portfolio` | Open positions marked-to-market, partial/batch/strategy close, roll, CSV export, portfolio risk |
-| `/history` | Full trade ledger (opens + closes) with realized P&L stats |
+| `/portfolio` | Open positions marked-to-market, partial/batch/strategy close, roll, CSV export, portfolio risk, P&L attribution |
+| `/history` | Full trade ledger (opens + closes) with realized P&L stats, performance analytics (equity curve, drawdown, breakdowns) |
+| `/calendar` | Expiry calendar (month/list), settlement center, `.ics` download |
 
 The `/options` page is tabbed below 1024px (and via the Tabs toggle):
 
@@ -107,9 +108,10 @@ src/
 │   ├── layout.tsx        # SpotFeed + BackendData + CommandLayer
 │   ├── page.tsx          # Home
 │   ├── options/          # Chain / Positions / Strategies / Surface / Workspace
-│   ├── portfolio/        # Partial, batch, strategy close + roll
-│   └── history/          # Trade ledger
-├── components/
+│   ├── portfolio/        # Open positions, roll, close, attribution, partial/batch/strategy close
+│   ├── history/          # Trade ledger + performance analytics
+│   └── calendar/         # Expiry calendar + settlement center
+├── components/           # UI components (charts, dialogs, header, etc.)
 │   └── command/          # Command palette, hotkeys, help overlay
 ├── features/
 │   ├── chain/            # AdvancedChain + column/strike-window utils
@@ -119,9 +121,23 @@ src/
     ├── close/            # Partial P&L math + batch executor
     ├── hooks/            # useBackend* including closeBatch / closeStrategyGroup
     ├── context/
-    ├── store/            # wallet.ts only
-    ├── pricing.ts
-    └── …
+    ├── store/            # zustand + persist — now just wallet.ts (connect,
+    │                      # sign-in-with-backend, bearer token)
+    ├── pricing.ts        # Black-Scholes, vol smile — fallback/preview layer, see above
+    ├── attribution.ts    # Taylor Greek P&L attribution (local baselines)
+    ├── analytics.ts      # Equity curve, drawdown, trade statistics
+    ├── expiry.ts         # Expiry derivation, grouping, .ics, settlement helpers
+    ├── alertRules.ts     # Client-side alert rule evaluator (hysteresis/cooldown)
+    ├── collateral.ts     # Collateral requirements (100% calls, 110% puts)
+    ├── payoff.ts          # Multi-leg combined payoff math (local; backend equivalent unused)
+    ├── risk.ts             # Whole-portfolio risk: groups all open positions per
+    │                       # underlying into one payoff curve, stress-tests the
+    │                       # account across a spot-shock grid
+    ├── volSurface.ts      # Term-structure-aware IV surface grid
+    ├── strategies.ts      # Multi-leg strategy templates
+    ├── csv.ts / notify.ts # CSV export, browser + in-app notifications
+    ├── useHydrated.ts     # SSR-hydration-safety hook (see below) — still relevant for wallet.ts
+    └── usePriceHistory.ts # In-memory spot sparkline buffer
 ```
 
 ### A note on hydration safety
@@ -149,8 +165,13 @@ and falls back:
 - Sequential per-leg closes with progress + stop/continue when unsupported
   (non-atomic leg risk is warned in the confirm dialog)
 
+```bash
+npm test          # node:test unit suite (attribution, analytics, expiry, alertRules)
+```
+
 ## Known gaps
 
+- No RTL / component test suite yet (pure lib modules are covered).
 - PWA: hand-written `public/sw.js` (no Serwist/Workbox dependency), production-only registration, SVG icons only (no PNG set), no Playwright offline tests and no Lighthouse run yet. Only last-known public spot prices are snapshotted (IndexedDB, wiped on disconnect); positions/account are not cached.
 - Playwright e2e keyboard/drag flows are not in CI yet; unit coverage is via vitest.
 - No on-chain/Soroban integration — the backend is a paper-trading API, not

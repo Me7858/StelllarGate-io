@@ -9,6 +9,7 @@ import { useHydrated } from "../../lib/useHydrated";
 import { fmtN, fmtK } from "../../lib/pricing";
 import { toCsv, downloadCsv } from "../../lib/csv";
 import { ExportButton } from "../../components/ExportButton";
+import { PerformanceAnalytics } from "../../components/PerformanceAnalytics";
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -74,6 +75,8 @@ export default function HistoryPage() {
               ))}
             </div>
           )}
+
+          {trades.length>0 && <PerformanceAnalytics trades={trades} />}
 
           {trades.length===0 ? (
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
