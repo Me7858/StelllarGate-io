@@ -3,8 +3,6 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { PayoffDiagram } from "../../components/PayoffDiagram";
-import { VolSmile } from "../../components/VolSmile";
 import { AppHeader } from "../../components/AppHeader";
 import { WalletConnect } from "../../components/WalletConnect";
 import { MARKETS, EXPIRIES, bs, smileVol, seededRandom, fmtN, fmtSpot, fmtK, type Greeks } from "../../lib/pricing";
@@ -16,7 +14,6 @@ import { useWalletStore } from "../../lib/store/wallet";
 import { collateralRequired } from "../../lib/collateral";
 import { AlertsPanel } from "../../components/AlertsPanel";
 import { StarButton } from "../../components/StarButton";
-import { SpotPriceChart } from "../../components/SpotPriceChart";
 import { usePriceHistory } from "../../lib/usePriceHistory";
 import { useHydrated } from "../../lib/useHydrated";
 import { useNetworkReady } from "../../lib/hooks/useNetworkReady";

@@ -13,7 +13,9 @@ import { MARKETS, EXPIRIES, bs, smileVol, fmtN, fmtK } from "../../lib/pricing";
 import { collateralRequired } from "../../lib/collateral";
 import { toCsv, downloadCsv } from "../../lib/csv";
 import { ExportButton } from "../../components/ExportButton";
-import { PortfolioRiskPanel } from "../../components/PortfolioRiskPanel";
+// PortfolioRiskPanel renders a heavy canvas chart — load lazily to keep
+// the portfolio page's initial JS lean (Issue #108 bundle optimization).
+import { PortfolioRiskPanelLazy as PortfolioRiskPanel } from "../../components/lazy";
 import { RulesPanel } from "../../components/RulesPanel";
 import type { MarkedPosition } from "../../lib/managementRules";
 import { useLivePnL, type LivePosition } from "../../lib/hooks/useLivePnL";

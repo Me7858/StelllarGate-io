@@ -9,6 +9,14 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081",
   },
 
+  // Tell webpack/Next to tree-shake named exports instead of pulling in
+  // the whole package barrel for these dependencies.  This cuts the initial
+  // JS shipped to the browser for packages that export a large default
+  // object (e.g. @stellar/freighter-api).
+  experimental: {
+    optimizePackageImports: ["@stellar/freighter-api"],
+  },
+
   webpack: (config, { isServer }) => {
     // @stellar/stellar-sdk pulls in sodium-native (a Node.js native addon)
     // for Ed25519 signing in server environments. It's not needed in the
@@ -25,6 +33,7 @@ const nextConfig = {
       };
     }
     return config;
+  },
   },
 };
 
