@@ -14,6 +14,8 @@ import { collateralRequired } from "../../lib/collateral";
 import { toCsv, downloadCsv } from "../../lib/csv";
 import { ExportButton } from "../../components/ExportButton";
 import { PortfolioRiskPanel } from "../../components/PortfolioRiskPanel";
+import { GreekExposurePanel } from "../../components/GreekExposurePanel";
+import { SorobanHealthIndicator } from "../../components/SorobanHealthIndicator";
 import { AccountReadinessChecklist } from "../../components/AccountReadinessChecklist";
 import { ReconciliationPanel } from "../../components/ReconciliationPanel";
 import { DepositWithdrawModal } from "../../components/DepositWithdrawModal";
@@ -176,6 +178,8 @@ export default function PortfolioPage() {
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"var(--bg)",overflow:"hidden",fontFamily:"var(--font-sans)"}}>
       <AppHeader>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <SorobanHealthIndicator />
+          <div style={{width:1,height:16,background:"var(--border-default)",margin:"0 4px"}}/>
           <div style={{width:5,height:5,borderRadius:"50%",background:"var(--call)"}}/>
           <span style={{fontSize:10,color:"var(--text-lo)"}}>Marked to market · Stellar Testnet</span>
           <div style={{width:1,height:16,background:"var(--border-default)",margin:"0 8px"}}/>
@@ -250,6 +254,14 @@ export default function PortfolioPage() {
           )}
 
           {backendPositions.length>0 && <PortfolioRiskPanel positions={backendPositions} spots={spots} />}
+          {backendPositions.length>0 && (
+            <GreekExposurePanel
+              positions={backendPositions}
+              spots={spots}
+              vols={vols}
+              backendGreeks={netGreeks}
+            />
+          )}
 
           {/* On-chain readiness & reconciliation — shown when wallet is connected */}
           {!notSignedIn && (

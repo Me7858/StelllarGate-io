@@ -24,6 +24,7 @@ import { StrategyPicker } from "../../components/StrategyPicker";
 import { MultiLegPayoffDiagram } from "../../components/MultiLegPayoffDiagram";
 import { VolSurfaceHeatmap } from "../../components/VolSurfaceHeatmap";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { RfqPanel } from "../../components/RfqPanel";
 import { type StrategyTemplate } from "../../lib/strategies";
 import { netPremium, type PricedLeg } from "../../lib/payoff";
 
@@ -62,7 +63,7 @@ function OptionsPageContent() {
   const vol = spotData?.vols[sym] ?? market.vol;
   const priceHistory = usePriceHistory(sym, spot);
   const [contracts, setContracts] = useState("1");
-  const [viewTab, setViewTab] = useState<"chain"|"positions"|"strategies"|"surface">("chain");
+  const [viewTab, setViewTab] = useState<"chain"|"positions"|"strategies"|"surface"|"rfq">("chain");
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyTemplate|null>(null);
   const [showStrategyConfirm, setShowStrategyConfirm] = useState(false);
   const prevSpotRef = useRef(spot);
@@ -345,7 +346,7 @@ function OptionsPageContent() {
         {/* CENTER: CHAIN */}
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minWidth:0}}>
           <div style={{display:"flex",borderBottom:"1px solid var(--border-default)",padding:"0 8px",background:"var(--bg-raised)"}}>
-            {(["chain","positions","strategies","surface"] as const).map(tab=>(
+            {(["chain","positions","strategies","surface","rfq"] as const).map(tab=>(
               <button key={tab} onClick={()=>setViewTab(tab)} style={{
                 padding:"8px 14px",border:"none",background:"transparent",cursor:"pointer",
                 fontSize:12,fontWeight:500,textTransform:"capitalize",
@@ -527,6 +528,12 @@ function OptionsPageContent() {
           {viewTab==="surface"&&(
             <div style={{flex:1,overflowY:"auto",padding:16}}>
               <VolSurfaceHeatmap baseVol={vol} selectedExpiryDays={expiry.days}/>
+            </div>
+          )}
+
+          {viewTab==="rfq"&&(
+            <div style={{flex:1,overflowY:"auto",padding:16,maxWidth:640}}>
+              <RfqPanel sym={sym} spot={spot} vol={vol}/>
             </div>
           )}
 
