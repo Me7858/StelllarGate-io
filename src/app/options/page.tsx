@@ -27,6 +27,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { RfqPanel } from "../../components/RfqPanel";
 import { type StrategyTemplate } from "../../lib/strategies";
 import { netPremium, type PricedLeg } from "../../lib/payoff";
+import { VolContextPanel } from "../../components/VolContextPanel";
 
 interface ChainRow{strike:number;call:Greeks;put:Greeks;itmCall:boolean;itmPut:boolean;}
 interface TradeState{row:ChainRow;side:"call"|"put";mode:"buy"|"write";}
@@ -63,7 +64,7 @@ function OptionsPageContent() {
   const vol = spotData?.vols[sym] ?? market.vol;
   const priceHistory = usePriceHistory(sym, spot);
   const [contracts, setContracts] = useState("1");
-  const [viewTab, setViewTab] = useState<"chain"|"positions"|"strategies"|"surface"|"rfq">("chain");
+  const [viewTab, setViewTab] = useState<"chain"|"positions"|"strategies"|"surface"|"volatility"|"rfq">("chain");
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyTemplate|null>(null);
   const [showStrategyConfirm, setShowStrategyConfirm] = useState(false);
   const prevSpotRef = useRef(spot);
@@ -346,7 +347,7 @@ function OptionsPageContent() {
         {/* CENTER: CHAIN */}
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minWidth:0}}>
           <div style={{display:"flex",borderBottom:"1px solid var(--border-default)",padding:"0 8px",background:"var(--bg-raised)"}}>
-            {(["chain","positions","strategies","surface","rfq"] as const).map(tab=>(
+            {(["chain","positions","strategies","surface","volatility","rfq"] as const).map(tab=>(
               <button key={tab} onClick={()=>setViewTab(tab)} style={{
                 padding:"8px 14px",border:"none",background:"transparent",cursor:"pointer",
                 fontSize:12,fontWeight:500,textTransform:"capitalize",
@@ -531,9 +532,17 @@ function OptionsPageContent() {
             </div>
           )}
 
+          {viewTab==="volatility"&&(
+            <div style={{flex:1,overflowY:"auto",padding:16}}>
+              <VolContextPanel underlying={sym} currentIv={vol}/>
+            </div>
+          )}
+
           {viewTab==="rfq"&&(
             <div style={{flex:1,overflowY:"auto",padding:16,maxWidth:640}}>
               <RfqPanel sym={sym} spot={spot} vol={vol}/>
+            </div>
+          )}
             </div>
           )}
 
