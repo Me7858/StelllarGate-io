@@ -25,6 +25,7 @@ interface WalletState {
   /** True once a 401 recovery failed or the token expired — drives the banner. */
   sessionExpired: boolean;
   connect: () => Promise<void>;
+  connectLedger: (index?: number) => Promise<void>;
   disconnect: () => void;
   /** Prompts one re-sign; resolves to the new token or null. */
   reauthenticate: () => Promise<string | null>;
@@ -101,6 +102,37 @@ export const useWalletStore = create<WalletState>()(
           }
         } catch (err) {
           set({ status: 'error', error: err instanceof Error ? err.message : 'Failed to connect wallet' });
+        }
+      },
+
+      connectLedger: async (index = 0) => {
+        set({ status: "connecting", error: null });
+        try {
+          // Lazy-import the ledger signer adapter so bundlers don't pull ledger
+          // code into the main bundle unless the user requests it.
+          const mod = await import("../ledgerSigner");
+          const connectLedgerAccount = mod.default || mod.connectLedgerAccount || mod.connectLedger;
+          if (typeof connectLedgerAccount !== "function") throw new Error("Ledger adapter not available");
+
+          const ledger = await connectLedgerAccount(index).catch((e: any) => { throw e; });
+          const address = ledger.address;
+          const details = null;
+          set({ status: "connected", address, network: details?.network ?? null, error: null });
+
+          try {
+            const token = await signInWithBackend(address, ledger.signMessage);
+            set({ token, tokenExpiresAt: tokenExpiry(token), sessionExpired: false });
+          } catch (err) {
+            // Connected but no backend session
+            set({ token: null, error: err instanceof Error ? err.message : "Backend sign-in failed" });
+          }
+
+          // Note: keep the transport open until the user disconnects; ledger
+          // adapter exposes a `close()` method the store could call on
+          // disconnect if desired. For simplicity we don't persist the
+          // transport reference here.
+        } catch (err) {
+          set({ status: "error", error: err instanceof Error ? err.message : "Failed to connect Ledger" });
         }
       },
 
