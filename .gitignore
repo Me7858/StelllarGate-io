@@ -5,6 +5,8 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
 
 # next.js
 /.next/
@@ -12,6 +14,10 @@
 
 # production
 /build
+
+# storybook
+/storybook-static
+storybook-error.log
 
 # misc
 .DS_Store

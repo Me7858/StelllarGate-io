@@ -1,0 +1,121 @@
+<!--
+  preview-head.html — injected into the <head> of Storybook's preview iframe.
+
+  Responsibilities:
+    1. Load IBM Plex Sans, JetBrains Mono, and Fraunces from Google Fonts.
+    2. Declare the full set of Zenith CSS custom properties so that any
+       story that renders before globals.css has fully applied still sees
+       correct tokens (e.g. colour, spacing, heat-map values).
+
+  The CSS custom properties here are kept in sync with
+  src/app/globals.css :root.  When updating one file, update the other.
+-->
+
+<!-- Google Fonts: preconnect for DNS + TLS warm-up -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+<!--
+  IBM Plex Sans  — weights 400/500/600/700, normal + italic
+  JetBrains Mono — weights 400/500/700 (tabular numerals in the chain)
+  Fraunces       — variable font, wght axis 100–900, opsz axis (serif display)
+-->
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..700&display=swap"
+  rel="stylesheet"
+/>
+
+<style>
+  /*
+    =====================================================================
+    1. CSS font-name variables
+       next/font is not available in Storybook; preview.ts maps these via
+       --font-plex-sans / --font-jetbrains-mono / --font-fraunces so that
+       the font-stack fallbacks in globals.css resolve to real families.
+    =====================================================================
+  */
+  :root {
+    --font-plex-sans: 'IBM Plex Sans';
+    --font-jetbrains-mono: 'JetBrains Mono';
+    --font-fraunces: 'Fraunces';
+  }
+
+  /*
+    =====================================================================
+    2. Full Zenith CSS custom-property token set
+       Mirrors src/app/globals.css :root exactly.  Storybook builds can
+       import globals.css through the webpack pipeline, but having the
+       tokens here ensures they are available even for bare HTML / no-JS
+       rendering contexts (Storybook docs static export, a11y audits, etc.)
+    =====================================================================
+  */
+  :root {
+    /* ── Surfaces ───────────────────────────────────────────────────── */
+    --bg:           #14130f;
+    --bg-raised:    #1a1812;
+    --bg-elevated:  #221f17;
+    --bg-overlay:   #2c2820;
+
+    /* ── Borders ────────────────────────────────────────────────────── */
+    --border-subtle:  rgba(245, 238, 220, 0.05);
+    --border-default: rgba(245, 238, 220, 0.10);
+    --border-strong:  rgba(245, 238, 220, 0.18);
+
+    /* ── Market colours ─────────────────────────────────────────────── */
+    --call:     #5c9a6b;
+    --call-dim: rgba(92, 154, 107, 0.12);
+    --put:      #b65640;
+    --put-dim:  rgba(182, 86, 64, 0.12);
+    --atm:      #b59665;
+    --atm-dim:  rgba(181, 150, 101, 0.12);
+
+    /* ── Brand / accent ─────────────────────────────────────────────── */
+    --brand:     #b59665;
+    --brand-dim: rgba(181, 150, 101, 0.14);
+
+    /* ── Typography ─────────────────────────────────────────────────── */
+    --text-hi:  #f3eee3;
+    --text-mid: #9c9484;
+    --text-lo:  #5c5648;
+
+    /* Font-stack variables — resolve to Google Fonts names set above */
+    --font-serif: var(--font-fraunces),       Georgia,       serif;
+    --font-sans:  var(--font-plex-sans),      system-ui,     sans-serif;
+    --font-mono:  var(--font-jetbrains-mono), ui-monospace,  monospace;
+
+    /* ── Heat-map tokens ────────────────────────────────────────────── */
+    --heat-seq-lo:  #362a14;
+    --heat-seq-hi:  #e8d6a8;
+    --heat-div-lo:  #b65640;
+    --heat-div-mid: #2c2820;
+    --heat-div-hi:  #5c9a6b;
+    --heat-bar:     #b59665;
+  }
+
+  /*
+    =====================================================================
+    3. Base resets (mirrors globals.css body / html rules)
+       Keeps Storybook's canvas consistent with the real app shell.
+    =====================================================================
+  */
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-hi);
+    font-family: var(--font-sans);
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: inherit;
+  }
+</style>

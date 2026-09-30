@@ -15,7 +15,8 @@ interface SpotFeedData {
   request: () => void;
 }
 
-const SpotFeedContext = createContext<SpotFeedData | null>(null);
+/** Exported so mock providers (e.g. Storybook) can inject a value without a real WebSocket. */
+export const SpotFeedContext = createContext<SpotFeedData | null>(null);
 
 /**
  * One shared WebSocket connection for the whole app, mounted at the

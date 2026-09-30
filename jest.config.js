@@ -18,7 +18,7 @@ const config = {
     "**/__tests__/**/*.(ts|tsx|js|jsx)",
     "**/*.(test|spec).(ts|tsx|js|jsx)",
   ],
-  testPathIgnorePatterns: ["/node_modules/", "/.next/", "/tests/e2e/"],
+  testPathIgnorePatterns: ["/node_modules/", "/.next/", "/e2e/", "/tests/e2e/", "storybook.visual.spec"],
   // react-markdown / rehype-sanitize and the unified ecosystem ship ESM only.
   transformIgnorePatterns: [
     "/node_modules/(?!(react-markdown|rehype-.*|remark-.*|unified|unist-.*|mdast-.*|hast-.*|hastscript|micromark.*|vfile.*|bail|ccount|comma-separated-tokens|space-separated-tokens|character-entities.*|character-reference-invalid|decode-named-character-reference|devlop|estree-util-.*|html-url-attributes|is-.*|longest-streak|markdown-table|parse-entities|property-information|stringify-entities|trim-lines|trough|web-namespaces|zwitch|html-void-elements|style-to-.*|inline-style-parser|@ungap)/)",
