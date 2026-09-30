@@ -15,6 +15,7 @@ const TABS = [
   { key: "portfolio", href: "/portfolio" },
   { key: "history", href: "/history" },
   { key: "vaults", href: "/vaults" },
+  { key: "security", href: "/security" },
 ] as const;
 
 export function AppHeader({ children }: { children?: React.ReactNode }) {
