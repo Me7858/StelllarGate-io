@@ -1,0 +1,98 @@
+import { PayoffPlayground } from "../../../components/docs/calculators/PayoffPlayground";
+import { BlockMath, InlineMath } from "../../../components/docs/Math";
+
+export const metadata = {
+  title: "Payoff & Strategy Playground | Zenith Protocol Docs",
+  description: "Explore single-leg and multi-leg option payoff math at expiration, net premium debits and credits, breakeven analysis, and an embedded interactive strategy playground.",
+};
+
+# Payoff & Strategy Playground
+
+An option's payoff at expiration is a piecewise linear function determined by the terminal spot price of the underlying asset $S_T$, the strike price $K$, and the initial net premium paid or collected.
+
+Zenith enables traders to combine multiple option contracts into structured multi-leg strategies. This page details the mathematical payoff functions and provides an interactive simulation playground running directly against `src/lib/payoff.ts`.
+
+---
+
+<h2 id="payoff-mechanics">Payoff Math at Expiry</h2>
+
+For a single option leg with strike $K$, entry premium $P_0$, and contract volume $N$:
+
+### Long Call (Buy Call)
+<BlockMath math="\text{P\&L}_{\text{long call}} = \Big(\max(0, S_T - K) - P_0\Big) \cdot N" />
+* **Max Loss:** Capped at the premium paid: $-P_0 \cdot N$.
+* **Max Gain:** Theoretically unlimited as $S_T \to \infty$.
+* **Breakeven:** $S_{\text{BE}} = K + P_0$.
+
+### Short Call (Sell Call)
+<BlockMath math="\text{P\&L}_{\text{short call}} = \Big(P_0 - \max(0, S_T - K)\Big) \cdot N" />
+* **Max Gain:** Capped at premium collected: $+P_0 \cdot N$.
+* **Max Loss:** Unlimited if spot price surges.
+
+### Long Put (Buy Put)
+<BlockMath math="\text{P\&L}_{\text{long put}} = \Big(\max(0, K - S_T) - P_0\Big) \cdot N" />
+* **Max Loss:** Capped at premium paid: $-P_0 \cdot N$.
+* **Max Gain:** $(K - P_0) \cdot N$ (when asset drops to zero).
+* **Breakeven:** $S_{\text{BE}} = K - P_0$.
+
+### Short Put (Sell Put)
+<BlockMath math="\text{P\&L}_{\text{short put}} = \Big(P_0 - \max(0, K - S_T)\Big) \cdot N" />
+* **Max Gain:** $+P_0 \cdot N$.
+* **Max Loss:** Substantial down to $S_T = 0$: $-(K - P_0) \cdot N$.
+
+---
+
+<h2 id="multi-leg-strategies">Multi-Leg Combinations</h2>
+
+When combining $M$ distinct legs into a single portfolio strategy, the combined terminal profit or loss at spot price $S_T$ is the linear sum of all legs:
+
+<BlockMath math="\text{P\&L}_{\text{total}}(S_T) = \sum_{j=1}^{M} \left[ \Big(\text{Intrinsic}_j(S_T) \cdot \text{sign}_j - P_{0,j} \cdot \text{sign}_j \Big) \cdot N_j \right]" />
+
+where:
+* $\text{sign}_j = +1$ for bought legs (long), and $-1$ for sold legs (short).
+* $\text{Intrinsic}_j(S_T) = \max(0, S_T - K_j)$ for calls, and $\max(0, K_j - S_T)$ for puts.
+
+The initial capital flow is the **Net Premium**:
+
+<BlockMath math="\text{Net Premium} = \sum_{j=1}^{M} \Big(\text{sign}_j \cdot P_{0,j} \cdot N_j\Big)" />
+* Positive $\implies$ **Net Debit** (trader pays cash to open).
+* Negative $\implies$ **Net Credit** (trader receives cash upfront).
+
+---
+
+<h2 id="payoff-playground">Interactive Payoff Playground</h2>
+
+Build, adjust, and inspect strategy payoffs in real time. Choose from pre-configured templates or add custom legs with live chart rendering powered by `src/lib/payoff.ts`:
+
+<PayoffPlayground />
+
+---
+
+<h2 id="common-templates">Strategy Templates</h2>
+
+Traders frequently use structured templates to tailor their risk/reward profile:
+
+| Strategy | Structure | Market Bias | Max Gain | Max Loss |
+| :--- | :--- | :--- | :--- | :--- |
+| **Bull Call Spread** | Buy Call ($K_1$) + Sell Call ($K_2 > K_1$) | Moderately Bullish | $(K_2 - K_1) - \text{Debit}$ | Net Debit Paid |
+| **Bear Put Spread** | Buy Put ($K_2$) + Sell Put ($K_1 < K_2$) | Moderately Bearish | $(K_2 - K_1) - \text{Debit}$ | Net Debit Paid |
+| **Long Straddle** | Buy Call ($K$) + Buy Put ($K$) | High Volatility Breakout | Unlimited | Net Debit Paid |
+| **Long Strangle** | Buy OTM Put ($K_1$) + Buy OTM Call ($K_2$) | Explosive Volatility | Unlimited | Net Debit Paid |
+| **Iron Condor** | Buy Put ($K_1$) + Sell Put ($K_2$) + Sell Call ($K_3$) + Buy Call ($K_4$) | Range-bound Neutral | Net Credit Collected | $(K_4 - K_3) - \text{Credit}$ |
+
+---
+
+<h2 id="breakeven-analysis">Breakeven & Max P&L Analysis</h2>
+
+To identify exact breakeven spot prices $S_{\text{BE}}$, the protocol calculates points where the combined payoff curve crosses the zero P&L axis:
+
+<BlockMath math="\text{P\&L}_{\text{total}}(S_{\text{BE}}) = 0" />
+
+For spread positions, breakevens typically occur between adjacent strikes:
+* **Bull Call Spread:** $S_{\text{BE}} = K_{\text{long}} + \text{Net Debit}$
+* **Bear Put Spread:** $S_{\text{BE}} = K_{\text{long}} - \text{Net Debit}$
+* **Iron Condor:** Two breakevens:
+  * Lower BE: $K_{\text{short put}} - \text{Net Credit}$
+  * Upper BE: $K_{\text{short call}} + \text{Net Credit}$
+
+Review the implementation in [`src/lib/payoff.ts`](https://github.com/Zenith-options/frontend/blob/main/src/lib/payoff.ts#L12-L37) to see how series points are sampled and computed.

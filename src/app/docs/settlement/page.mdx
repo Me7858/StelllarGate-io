@@ -1,0 +1,83 @@
+import { BlockMath, InlineMath } from "../../../components/docs/Math";
+
+export const metadata = {
+  title: "Settlement & Exercise | Zenith Protocol Docs",
+  description: "Settlement lifecycle of European options on Zenith: Reflector decentralized oracle price discovery, 24-hour exercise window, payout math, and collateral reclaim.",
+};
+
+# Settlement & Exercise
+
+Zenith options are settled completely on-chain via Soroban smart contracts. This page explains how options reach expiry, how reference prices are authenticated, and how payouts are calculated and disbursed.
+
+---
+
+<h2 id="settlement-lifecycle">Settlement Lifecycle</h2>
+
+Every options contract passes through a deterministic three-phase lifecycle:
+
+```text
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│  Trading Phase  │ ────► │ Expiration Time │ ────► │ Settlement /    │
+│  (Until T = 0)  │       │ (Oracle Fix)    │       │ Payout Phase    │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
+  • Buy / sell contracts    • Expiry timestamp hits   • ITM holders exercise
+  • Open / close positions  • Reflector oracle signs  • Writers reclaim excess
+  • Dynamic Black-Scholes     settlement spot price     collateral
+```
+
+1. **Active Trading:** Up until the expiry timestamp $T$, contracts can be bought, sold, or rolled.
+2. **Oracle Fixing:** At timestamp $T$, trading for the series halts, and the contract captures the terminal spot price $S_T$ from the Reflector oracle.
+3. **Settlement Window:** During the subsequent 24-hour window, holders of in-the-money options invoke the settlement contract to receive cash payouts.
+
+---
+
+<h2 id="reflector-oracle">Reflector Oracle Feeds</h2>
+
+To prevent price manipulation, sandwich attacks, and oracle exploits, Zenith utilizes **Reflector**, a decentralized oracle network designed specifically for Stellar Soroban:
+
+* **Cryptographic Signatures:** Oracle feeds use Ed25519 signatures verified directly inside the Soroban contract runtime.
+* **Medianized Multi-Source Aggregation:** Reflector aggregates price quotes across multiple leading institutional exchanges (Binance, Coinbase, Kraken, OKX) using volume-weighted median filters.
+* **Timestamp & Staleness Thresholds:** Prices older than 180 seconds are rejected by the contract, ensuring that settlement prices reflect true market conditions at expiration.
+* **Tamper-Proof On-Chain Storage:** Once the expiration price $S_T$ is recorded for an expiry batch, it becomes immutable and cannot be overwritten.
+
+---
+
+<h2 id="exercise-window">The 24-Hour Exercise Window</h2>
+
+Unlike American options that require continuous monitoring, European options on Zenith grant a **24-hour settlement window** following expiration:
+
+* **Automatic In-The-Money Qualification:** Any contract where intrinsic value $> 0$ at the fixed oracle price qualifies for exercise.
+* **Holder Exercise:** Option buyers (or authorized keeper bots) invoke `exercise_position(position_id)`.
+* **Instant Disbursal:** The Soroban contract calculates the intrinsic payout and transfers the funds immediately from escrow into the caller's Stellar account.
+* **Batch Settlement:** Keepers and portfolio management tools can batch-exercise multiple expired contracts in a single Soroban transaction to conserve network fees.
+
+---
+
+<h2 id="payout-math">Intrinsic Payout Calculation</h2>
+
+The settlement payout depends on the contract side, number of contracts $N$, strike price $K$, and oracle settlement price $S_T$:
+
+### Call Option Payout
+For a Call option, the intrinsic payout per contract is the excess of spot price over strike:
+<BlockMath math="\text{Payout}_{\text{call}} = N \cdot \max(0, S_T - K)" />
+* If $S_T \le K$: The option expires worthless ($0$ payout).
+* If $S_T > K$: The contract transfers $(S_T - K) \cdot N$ in USDC to the option holder.
+
+### Put Option Payout
+For a Put option, the intrinsic payout is the excess of strike price over spot:
+<BlockMath math="\text{Payout}_{\text{put}} = N \cdot \max(0, K - S_T)" />
+* If $S_T \ge K$: The option expires worthless ($0$ payout).
+* If $S_T < K$: The contract transfers $(K - S_T) \cdot N$ in USDC to the option holder.
+
+All payouts are disbursed in standard SEP-41 compliant tokens (USDC or native XLM).
+
+---
+
+<h2 id="unclaimed-collateral">Unclaimed Collateral Reclaim</h2>
+
+Once the 24-hour exercise window elapses:
+
+1. **Option Writers:** Writers can call `reclaim_collateral(position_id)` to withdraw their remaining escrowed collateral.
+2. **Buffer Return:** For cash-secured puts, the entire 10% safety buffer is unlocked and refunded to the writer.
+3. **Out-of-the-Money Expirations:** If an option expired OTM, the writer receives 100% of their locked collateral back, keeping the initial premium collected as net profit.
+4. **Permanent Invariance:** Contract state is updated to closed, preventing replay invocations or duplicate claims.

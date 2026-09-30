@@ -166,6 +166,7 @@ retry, an empty state with a next step, or the data. The pieces are:
 | `/portfolio` | Open positions marked-to-market, partial/batch/strategy close, roll, CSV export, portfolio risk, P&L attribution |
 | `/history` | Full trade ledger (opens + closes) with realized P&L stats, performance analytics (equity curve, drawdown, breakdowns) |
 | `/calendar` | Expiry calendar (month/list), settlement center, `.ics` download |
+| `/docs` | MDX protocol documentation hub with interactive calculators (BS pricer, collateral, payoff playground) |
 
 The `/options` page is tabbed below 1024px (and via the Tabs toggle):
 
@@ -222,10 +223,12 @@ src/
 │   ├── options/          # Chain / Positions / Strategies / Surface / Workspace
 │   ├── portfolio/        # Open positions, roll, close, attribution, partial/batch/strategy close
 │   ├── history/          # Trade ledger + performance analytics
-│   └── calendar/         # Expiry calendar + settlement center
+│   ├── calendar/         # Expiry calendar + settlement center
+│   └── docs/             # MDX protocol documentation pages
 ├── components/           # UI components (charts, dialogs, header, etc.)
 │   ├── env/              # Environment banner, selector, mode stamp, mainnet switch dialog
-│   └── states/           # Skeleton / EmptyState / ErrorState / AuthGate / DataBoundary
+│   ├── states/           # Skeleton / EmptyState / ErrorState / AuthGate / DataBoundary
+│   └── docs/             # Docs components (calculators, search, toc, sidebar)
 ├── features/
 │   ├── options/          # Terminal pieces: chain, order ticket, positions, strategies, sidebar
 │   ├── onboarding/       # Tour, <Term> glossary, describeTrade(), content/<locale>/*.json

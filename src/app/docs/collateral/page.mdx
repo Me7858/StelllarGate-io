@@ -1,0 +1,109 @@
+import { CollateralCalculator } from "../../../components/docs/calculators/CollateralCalculator";
+import { BlockMath, InlineMath } from "../../../components/docs/Math";
+
+export const metadata = {
+  title: "Collateral Rules | Zenith Protocol Docs",
+  description: "Collateralization mechanics on Zenith: 100% spot asset lock for covered calls and 110% over-collateralization in USDC for cash-secured puts with embedded calculator.",
+};
+
+# Collateral Rules
+
+To guarantee solvency without liquidators or margin calls, Zenith enforces strict, mathematically deterministic collateral requirements for option writers.
+
+When writing an option, collateral is locked directly inside the Soroban contract escrow until either the position is closed or the contract expires.
+
+---
+
+<h2 id="why-collateral">Why Collateral Matters</h2>
+
+Traditional centralized options exchanges rely on portfolio margin models and automated liquidation engines. When market volatility spikes, liquidation cascades can cause severe slippage, unhedged socialized losses, or insolvency.
+
+Zenith eliminates liquidation cascades by adopting a **fully collateralized escrow architecture**:
+1. **Zero Liquidation Risk:** Option writers cannot be liquidated mid-contract regardless of how volatile the market becomes.
+2. **Guaranteed Payouts:** Every open option contract has 100% of potential payout capital pre-funded in escrow. Buyers are guaranteed complete settlement.
+3. **No Socialized Losses:** Insolvency of one participant cannot impact other participants in the protocol.
+
+---
+
+<h2 id="covered-calls">Covered Calls (100% Spot)</h2>
+
+When writing a **Call Option**, the writer commits to delivering the underlying asset at strike price $K$ if exercised.
+
+To guarantee delivery, the writer must deposit **100% of the underlying asset** into the Soroban contract:
+
+<BlockMath math="\text{Collateral}_{\text{call}} = N \cdot 1.00 \; \text{units of Underlying Asset}" />
+
+where $N$ is the number of contracts written.
+
+* **Example:** Writing 1,000 XLM Call options requires locking exactly **1,000 XLM** in the contract.
+* **USD Equivalence:** In fiat terms, the equivalent spot value locked is $N \cdot S$.
+* **Outcome on Expiry:**
+  * If $S \le K$ (OTM): The option expires worthless. The writer reclaims 100% of their locked 1,000 XLM, retaining the buyer's premium.
+  * If $S > K$ (ITM): The contract pays the intrinsic difference $(S - K) \cdot N$ to the buyer, and returns any remaining balance to the writer.
+
+---
+
+<h2 id="cash-secured-puts">Cash-Secured Puts (110% Over-Collateralization)</h2>
+
+When writing a **Put Option**, the writer commits to buying the underlying asset at strike price $K$ if the buyer exercises.
+
+To ensure total solvency and provide a robust safety buffer against sudden downward price gaps prior to expiration, Zenith requires **110% cash over-collateralization** locked in USDC:
+
+<BlockMath math="\text{Collateral}_{\text{put}} = N \cdot K \cdot 1.10 \; \text{USDC}" />
+
+* **Base Strike Obligation ($100\%$):** $N \cdot K$ represents the total potential cash needed if the asset's price drops to zero.
+* **Safety Buffer ($10\%$):** An additional $10\%$ buffer ($N \cdot K \cdot 0.10$) protects the protocol against slippage or extreme oracle deviations during expiration settlement.
+* **Example:** Writing 1,000 puts on XLM at strike $K = \$0.12$:
+  * Base obligation: $1,000 \times \$0.12 = \$120.00$ USDC
+  * 10% safety buffer: $\$12.00$ USDC
+  * Total collateral locked: **$132.00 USDC**
+
+---
+
+<h2 id="collateral-calculator">Interactive Collateral Calculator</h2>
+
+Use the calculator below to simulate required collateral for calls and puts across different assets, strikes, and contract sizes:
+
+<CollateralCalculator />
+
+---
+
+<h2 id="lock-and-release">Locking & Release Lifecycle</h2>
+
+Collateral moves through four transparent phases during an option's lifetime:
+
+```text
+[Position Open] ──► [Collateral Escrowed] ──► [Expiry / Close] ──► [Payout & Release]
+   Writer approves     Locked in Soroban       Position closes       Buyer receives ITM
+   SEP-41 allowance    smart contract          or 24h window hits    Writer receives rest
+```
+
+1. **Authorization:** Writer approves the Zenith Soroban contract to transfer the required tokens via standard SEP-41 token allowance.
+2. **Escrow:** Upon writing, tokens are transferred into contract storage. The writer cannot withdraw these funds until the position terminates.
+3. **Closing Position:** The writer can buy back the position on the open market at current market price, releasing the locked collateral immediately.
+4. **Expiration Settlement:**
+   * At expiration, the contract checks Reflector oracle spot price.
+   * If ITM, intrinsic payout is transferred to the buyer.
+   * Any remaining collateral (including the 10% put buffer) is returned to the writer.
+
+---
+
+<h2 id="code-implementation">Code Reference</h2>
+
+The client-side calculations and validation checks mirror `src/lib/collateral.ts` lines 8–10:
+
+```typescript
+// From src/lib/collateral.ts
+export type OptionSide = "call" | "put";
+
+export function collateralRequired(
+  side: OptionSide,
+  contracts: number,
+  strike: number,
+  spot: number
+): number {
+  return side === "call" ? contracts * spot : contracts * strike * 1.1;
+}
+```
+
+View the live file on [GitHub](https://github.com/Zenith-options/frontend/blob/main/src/lib/collateral.ts#L8-L10).
