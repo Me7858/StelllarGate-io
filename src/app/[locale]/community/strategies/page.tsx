@@ -28,6 +28,8 @@ import {
   type StrategyDefinition,
   type StrategyLeg,
 } from "../../../../lib/api/community";
+import { SafeMarkdown } from "../../../../components/SafeMarkdown";
+import { SafeAddress, SafeName } from "../../../../components/SafeText";
 
 // ── Zod-style validation (inline to avoid adding a dependency) ────────────
 const ALLOWED_UNDERLYINGS = ["XLM", "BTC", "ETH", "SOL"];
@@ -118,19 +120,19 @@ function StrategyCard({ strategy, token, onUpvote, onFlag, onImport }: CardProps
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-hi)", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {strategy.name}
+            <SafeName name={strategy.name} maxLength={80} />
           </div>
           <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-lo)" }}>
-            {strategy.author_wallet.slice(0, 8)}…{strategy.author_wallet.slice(-4)} · {strategy.definition.underlying} · {strategy.definition.legs.length} leg{strategy.definition.legs.length > 1 ? "s" : ""}
+            <SafeAddress address={strategy.author_wallet} truncate /> ·{strategy.definition.underlying} · {strategy.definition.legs.length} leg{strategy.definition.legs.length > 1 ? "s" : ""}
           </div>
         </div>
         <PayoffThumb def={strategy.definition} />
       </div>
 
       {/* Description */}
-      <p style={{ fontSize: 12, color: "var(--text-mid)", lineHeight: 1.55, marginBottom: 10, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+      <SafeMarkdown maxChars={1000} style={{ fontSize: 12, color: "var(--text-mid)", lineHeight: 1.55, marginBottom: 10, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
         {strategy.description}
-      </p>
+      </SafeMarkdown>
 
       {/* Tags */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>

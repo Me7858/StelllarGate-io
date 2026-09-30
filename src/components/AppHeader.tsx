@@ -8,6 +8,7 @@ import { AboutPanel } from "./AboutPanel";
 import { useBackendData } from "../lib/context/BackendDataContext";
 import { fmtN } from "../lib/pricing";
 import { TrackerHeaderButton } from "./TransactionTracker";
+import { ApiHealthBanner } from "./ApiHealthBanner";
 
 const TABS = [
   { key: "chain", href: "/options" },
@@ -28,6 +29,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
   const collateralLocked = account?.collateral_locked ?? 0;
 
   return (
+    <>
     <header style={{
       height: 44, flexShrink: 0, display: "flex", alignItems: "center",
       borderBottom: "1px solid var(--border-default)", padding: "0 16px", gap: 16,
@@ -70,5 +72,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
       <LocaleSwitcher compact />
       <AboutPanel />
     </header>
+    <ApiHealthBanner />
+    </>
   );
 }
