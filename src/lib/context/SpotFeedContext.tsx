@@ -144,3 +144,5 @@ export function useSpotFeedContext(visibleRef?: RefObject<Element | null>): Spot
   }, [request, visibleRef]);
   return ctx;
 }
+
+export { SpotFeedContext };

@@ -1,0 +1,126 @@
+{
+  "delta": {
+    "term": "Delta (Δ)",
+    "definition": "How much the option's price moves when the underlying moves $1. A delta of 0.50 gains about $0.50 per $1 rise. Calls have positive delta, puts negative. Also a rough guide to the odds of finishing in the money."
+  },
+  "gamma": {
+    "term": "Gamma (Γ)",
+    "definition": "How fast delta itself changes as the underlying moves. High gamma means your exposure shifts quickly, typical of at-the-money options close to expiry."
+  },
+  "theta": {
+    "term": "Theta (Θ)",
+    "definition": "Time decay: how much value the option loses per day if nothing else changes. Negative for buyers (time works against you), positive for writers."
+  },
+  "vega": {
+    "term": "Vega (V)",
+    "definition": "How much the option's price changes when implied volatility moves one percentage point. Long options gain when volatility rises; short options lose."
+  },
+  "iv": {
+    "term": "Implied volatility (IV)",
+    "definition": "The market's expectation of how much the underlying will swing, per year, backed out of option prices. Higher IV means more expensive options."
+  },
+  "premium": {
+    "term": "Premium",
+    "definition": "The price of an option. Buyers pay it up front; writers (sellers) receive it."
+  },
+  "strike": {
+    "term": "Strike",
+    "definition": "The price at which the option settles. A call pays out above its strike at expiry, a put pays out below it."
+  },
+  "expiry": {
+    "term": "Expiry",
+    "definition": "When the option settles. Zenith options are European: they can only be exercised at expiry, settled against the oracle price."
+  },
+  "call": {
+    "term": "Call",
+    "definition": "The right to the upside above the strike. Buying a call is a bet the price rises; selling one means you pay out if it does."
+  },
+  "put": {
+    "term": "Put",
+    "definition": "The right to the downside below the strike. Buying a put is a bet the price falls (or a hedge); selling one means you pay out if it does."
+  },
+  "bid": {
+    "term": "Bid",
+    "definition": "The price you receive if you write (sell) this option right now. Click a bid to sell."
+  },
+  "ask": {
+    "term": "Ask",
+    "definition": "The price you pay to buy this option right now. Click an ask to buy."
+  },
+  "oi": {
+    "term": "Open interest (OI)",
+    "definition": "How many contracts of this option are currently open. A rough measure of liquidity and interest."
+  },
+  "volume": {
+    "term": "Volume",
+    "definition": "How many contracts of this option traded recently."
+  },
+  "itm": {
+    "term": "In the money (ITM)",
+    "definition": "An option that would pay out if it expired right now: a call with the strike below spot, or a put with the strike above spot. Shaded in the chain."
+  },
+  "atm": {
+    "term": "At the money (ATM)",
+    "definition": "The strike closest to the current spot price. ATM options have the most time value and the highest gamma."
+  },
+  "spot": {
+    "term": "Spot price",
+    "definition": "The current market price of the underlying asset."
+  },
+  "collateral": {
+    "term": "Collateral",
+    "definition": "Balance locked when you write an option, so the payout is guaranteed if it finishes in the money: 100% of spot for calls, 110% of the strike for puts. Released when you close."
+  },
+  "breakeven": {
+    "term": "Breakeven",
+    "definition": "The underlying price at expiry where the trade neither makes nor loses money, after the premium."
+  },
+  "max-loss": {
+    "term": "Max loss",
+    "definition": "The most the position can lose at expiry. Buying options caps it at the premium paid; writing uncovered calls has no cap."
+  },
+  "net-debit": {
+    "term": "Net debit",
+    "definition": "A multi-leg trade that costs money to open: you pay more premium than you receive."
+  },
+  "net-credit": {
+    "term": "Net credit",
+    "definition": "A multi-leg trade that pays you to open: you receive more premium than you pay."
+  },
+  "long": {
+    "term": "Long",
+    "definition": "You bought the option. Your loss is limited to the premium paid."
+  },
+  "short": {
+    "term": "Short (written)",
+    "definition": "You sold the option and collected the premium. You owe the payout if it finishes in the money."
+  },
+  "pnl": {
+    "term": "Unrealized P&L",
+    "definition": "Profit or loss if you closed the position at current prices. It isn't locked in until you close."
+  },
+  "realized-pnl": {
+    "term": "Realized P&L",
+    "definition": "Profit or loss that's locked in because the position was closed or rolled."
+  },
+  "skew": {
+    "term": "25Δ skew",
+    "definition": "The difference in implied volatility between 25-delta puts and calls. Negative skew means downside protection costs more than upside."
+  },
+  "pc-ratio": {
+    "term": "Put/call ratio",
+    "definition": "Open interest in puts divided by calls. Above 1 suggests more hedging or bearish positioning."
+  },
+  "roll": {
+    "term": "Roll",
+    "definition": "Close a position and open a new one at a different strike or expiry in one step, usually to extend a trade."
+  },
+  "paper": {
+    "term": "Paper trading",
+    "definition": "Simulated fills against Zenith's paper backend. Nothing settles on-chain and no real funds move."
+  },
+  "practice": {
+    "term": "Practice mode",
+    "definition": "Walk through the full trade flow without sending anything, even to the paper backend. Confirming shows what would have happened."
+  }
+}

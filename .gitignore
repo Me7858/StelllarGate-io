@@ -33,6 +33,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# playwright
+# test output
 /test-results/
 /playwright-report/
+/blob-report/
+/lhci-report/
+/.lighthouseci/

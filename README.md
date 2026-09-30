@@ -53,12 +53,109 @@ alerts/live spot to actually load — without it, only the home page's local
 preview chain and the options chain's client-side BS fallback will render.
 
 ```bash
-npm run build   # production build
-npm run lint     # next lint
-npm test         # vitest unit tests
+npm run build      # production build
+npm run lint       # next lint
+npm run typecheck  # tsc --noEmit
+npm test           # unit + React Testing Library tests (Vitest, jsdom)
+npm run test:e2e   # Playwright: desktop Chrome, iPhone 13 (WebKit), Pixel 7
 ```
 
+The Playwright suite builds and starts the app itself and fakes the backend
+per test (`e2e/mockBackend.ts`), so no backend needs to be running. WebKit
+needs system libraries: `npx playwright install --with-deps chromium webkit`.
+Visual baselines live in `e2e/*-snapshots/`, one per device and platform; a
+device with no committed baseline skips its visual test. Generate one with
+`npx playwright test --project=<device> --update-snapshots`.
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests and build;
+the Playwright suite with a video of every test (uploaded as the
+`playwright-report` artifact); and Lighthouse CI on a 375px mobile profile
+(`lighthouserc.json`), which fails if CLS exceeds 0.05 or the mobile
+performance score drops below 0.85 on any page.
+
 A render performance harness (dev-only) lives at `http://localhost:3000/__perf` — drives four scripted tick sequences through real components and exports JSON metrics. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full guide, hotspot fixes, and CI setup.
+
+## Environment modes: Paper, Testnet, Mainnet
+
+The terminal always runs in exactly one mode, chosen in the header
+(`src/components/env/EnvironmentSelector.tsx`). Every per-network setting
+(API URL, Soroban RPC, network passphrase, contract IDs, colors) lives in one
+typed registry, `src/lib/env/networks.ts`, configured through the env vars
+in `.env.local.example`.
+
+- **Impossible to miss:** a full-width banner and a page frame on every page
+  (dashed slate for paper, amber for testnet, red for mainnet), a
+  `[PAPER]`/`[TESTNET]`/`[MAINNET]` title prefix, a mode-colored favicon, and
+  a mode stamp at the top of every confirm dialog. An inline `<head>` script
+  applies the persisted mode before first paint, so mainnet never flashes
+  as paper.
+- **Impossible to mix:** persisted state is namespaced per mode
+  (`zenith:<mode>:wallet` and so on, in `src/lib/env/storage.ts`). The API
+  client resolves its base URL from the active mode on every call, and
+  refuses to fall back when a mode has no backend configured. All in-memory
+  data providers are keyed by mode (`src/components/AppProviders.tsx`), so a
+  switch discards every cache rather than showing the old mode's data.
+- **Guarded:** switching to mainnet always needs an explicit
+  acknowledgement, and is refused while a connected Freighter wallet is on
+  another network. If Freighter changes network mid-session (it's polled every
+  3s), trading is blocked until it matches. A `?mode=testnet` or `?mode=paper`
+  link switches directly; `?mode=mainnet` only ever raises a prompt.
+
+## Loading, empty, error and signed-out states
+
+Every data surface (chain, positions, portfolio, history, watchlist, alerts,
+account chip, risk panel) renders exactly one of: a layout-matching
+skeleton, a signed-out prompt with a connect CTA, a recoverable error with
+retry, an empty state with a next step, or the data. The pieces are:
+
+- `src/lib/query.ts`: `useAsyncQuery`, an explicit `idle | loading |
+  success | error` status per query. It discards responses for a stale key and
+  keeps the last good data (flagged) when a background refresh fails. A 401
+  clears the session, so surfaces fall back to signed-out.
+- `src/components/states/`: `Skeleton`, `EmptyState`, `ErrorState`,
+  `AuthGate`, and `DataBoundary`, which picks the right one from a query and
+  the auth status. Pre-hydration, auth is "unknown" and renders the
+  skeleton, which is what SSR rendered too.
+- Balances are `null` until loaded and never render as `$0.00`. Skeleton
+  shimmer is off under `prefers-reduced-motion`.
+
+## Phones and tablets
+
+- ≤1024px: the market sidebar becomes a **Market** tab, tabs scroll and
+  respond to swipes, and the order ticket opens as a focus-trapped **bottom
+  sheet** (`src/components/BottomSheet.tsx`) that can be dragged down to
+  dismiss and lifts above the on-screen keyboard.
+- ≤640px chain container (a container query): one side at a time behind a
+  Calls/Puts toggle, with a sticky strike column.
+- Portfolio, history and positions tables become expandable cards (container
+  queries, `src/components/ExpandableCard.tsx`).
+- Payoff charts size to their container and support a touch or mouse
+  crosshair, pinch/ctrl-wheel zoom, and keyboard control
+  (`src/lib/hooks/useChartGestures.ts`).
+- Tap targets are ≥44×44 on touch and narrow layouts. Full-height pages use
+  `dvh` and respect the safe-area insets.
+
+## Onboarding and education (`src/features/onboarding/`)
+
+- **Tour:** chain → ticket → confirm → portfolio. It's skippable, pausable
+  (Esc) and resumable from the header's **?** menu, and its progress
+  persists. Steps anchor to `data-tour` attributes, not CSS classes, and
+  re-measure on resize, scroll and DOM changes. When an anchor isn't on
+  screen, the step explains how to get there.
+- **Glossary:** `<Term id="theta">` gives any term an accessible definition
+  that works on hover, focus and tap, meeting WCAG 1.4.13 (dismissible,
+  hoverable, persistent). Used for every Greek and trading term in the
+  terminal, portfolio and history.
+- **Plain-language summaries:** every trade confirmation is described by the
+  pure `describeTrade(legs, context)`. It computes exact breakevens, max
+  loss and max profit from the piecewise-linear payoff, for example: "You're
+  selling 2 BTC 70k calls expiring in 30 days. You collect $3,000.00 now. If
+  BTC is above $71,500.00 at expiry you lose money; losses are unlimited
+  above that."
+- **Practice mode:** confirmations simulate the trade locally and send
+  nothing, with no wallet needed.
+- All copy lives in `content/<locale>/*.json` (glossary, tour, trade
+  templates), ready for i18n.
 
 ## Pages
 
@@ -127,17 +224,28 @@ src/
 │   ├── history/          # Trade ledger + performance analytics
 │   └── calendar/         # Expiry calendar + settlement center
 ├── components/           # UI components (charts, dialogs, header, etc.)
-│   └── command/          # Command palette, hotkeys, help overlay
+│   ├── env/              # Environment banner, selector, mode stamp, mainnet switch dialog
+│   └── states/           # Skeleton / EmptyState / ErrorState / AuthGate / DataBoundary
 ├── features/
-│   ├── chain/            # AdvancedChain + column/strike-window utils
-│   └── workspace/        # Grid layouts, presets, persistence
+│   ├── options/          # Terminal pieces: chain, order ticket, positions, strategies, sidebar
+│   ├── onboarding/       # Tour, <Term> glossary, describeTrade(), content/<locale>/*.json
+│   └── command/          # Command palette, hotkeys, help overlay
 └── lib/
-    ├── api/              # Typed backend client (+ close feature detection)
-    ├── close/            # Partial P&L math + batch executor
-    ├── hooks/            # useBackend* including closeBatch / closeStrategyGroup
+    ├── api/              # Typed backend client: one file per domain
+    │   ├── client.ts     # fetchJson + wsUrl(), NEXT_PUBLIC_API_URL, bearer auth header
+    │   ├── market.ts, positions.ts, watchlist.ts, alerts.ts, history.ts,
+    │   │   strategies.ts, auth.ts, ws.ts, payoff.ts (client exists, unused)
+    │   └── types.ts      # Response shapes mirroring the backend's
+    ├── hooks/             # useBackend{Account,Positions,Watchlist,Alerts,History},
+    │                      # useSpotFeed (WS reconnect w/ backoff)
+    ├── env/               # Mode registry, per-mode storage namespaces, favicon/title
+    ├── query.ts           # useAsyncQuery: idle/loading/success/error per data surface
     ├── context/
-    ├── store/            # zustand + persist — now just wallet.ts (connect,
-    │                      # sign-in-with-backend, bearer token)
+    │   ├── EnvironmentContext.tsx  # active mode, guarded switching, wallet-network checks
+    │   ├── BackendDataContext.tsx  # one shared account/positions/watchlist/alerts instance
+    │   └── SpotFeedContext.tsx     # one shared WebSocket connection app-wide
+    ├── store/             # zustand + persist — now just wallet.ts (connect,
+    │                      # sign-in-with-backend, bearer token; persisted per mode)
     ├── pricing.ts        # Black-Scholes, vol smile — fallback/preview layer, see above
     ├── attribution.ts    # Taylor Greek P&L attribution (local baselines)
     ├── analytics.ts      # Equity curve, drawdown, trade statistics
@@ -227,11 +335,27 @@ npm test          # node:test unit suite (attribution, analytics, expiry, alertR
 
 ## Known gaps
 
+- The iPhone 13 (WebKit) Playwright project needs WebKit's system libraries,
+  so it runs in CI. Its visual baseline has to be generated there (or on a
+  machine with them) before its visual test stops being skipped.
+- The mobile Lighthouse performance score for `/options` measured
+  0.86–0.89 locally against the 0.85 gate. There isn't much headroom, and
+  a slow CI runner may need a re-run.
+- Testnet/mainnet modes are UI- and data-isolation-complete, but there's no
+  Soroban transaction path yet: with no testnet/mainnet backend configured,
+  those modes show market data from the local model and refuse trades.
 - Unit tests cover heat scales, candles, vol-surface mesh, and scenario grid
   (`npm test`). General Playwright e2e suite not yet in CI (keyboard/drag flows).
 - No RTL / component test suite yet (pure lib modules are covered).
 - PWA: hand-written `public/sw.js` (no Serwist/Workbox dependency), production-only registration, SVG icons only (no PNG set), no Playwright offline tests and no Lighthouse run yet. Only last-known public spot prices are snapshotted (IndexedDB, wiped on disconnect); positions/account are not cached.
 - Playwright e2e keyboard/drag flows are not in CI yet; unit coverage is via vitest.
+- No on-chain/Soroban integration — the backend is a paper-trading API, not
+  a wallet transaction signer against the contracts.
+- Wallet sign-in (`signBlob` → verify → bearer token) hasn't been manually
+  confirmed against a live Freighter extension — no extension available in
+  this environment. The flow is logically complete, not hardware-tested.
+- The home page's preview chain still runs its own local random-walk spot
+  simulation rather than the shared WebSocket feed — only its watchlist i
 - No on-chain/Soroban integration — the backend is a paper-trading API, not
   a wallet transaction signer against the contracts.
 - Wallet sign-in (`signBlob` → verify → bearer token) hasn't been manually
