@@ -68,6 +68,177 @@ function FilterBar({ filters, onChange }: FilterBarProps) {
 
   const hasActive = !!(filters.from || filters.to || filters.underlying || filters.option_type || filters.result);
 
+  const columns = useMemo<ColumnDef<Position, any>[]>(() => [
+    {
+      accessorKey: "closed_at",
+      header: "Closed",
+      size: 130,
+      meta: {
+        filterType: "dateRange",
+        exportValue: (r) => r.closed_at ?? "",
+      },
+      cell: ({ getValue }) => <span style={{ color: "var(--text-mid)" }}>{fmtDate(getValue())}</span>,
+    },
+    {
+      accessorKey: "underlying",
+      header: "Asset",
+      size: 90,
+      meta: {
+        filterType: "enum",
+        filterOptions: MARKETS.map(m => ({ label: m.sym, value: m.sym })),
+      },
+      cell: ({ getValue }) => <span style={{ fontWeight: 600, color: "var(--text-hi)" }}>{getValue()}</span>,
+    },
+    {
+      accessorKey: "position_type",
+      header: "Type",
+      size: 80,
+      meta: {
+        filterType: "enum",
+        filterOptions: [
+          { label: "Long", value: "long" },
+          { label: "Short", value: "short" },
+        ],
+      },
+      cell: ({ getValue }) => {
+        const val = getValue() as string;
+        const isShort = val === "short";
+        return (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              padding: "2px 6px",
+              background: isShort ? "var(--put-dim)" : "var(--call-dim)",
+              color: isShort ? "var(--put)" : "var(--call)",
+              textTransform: "uppercase",
+            }}
+          >
+            {val}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "option_type",
+      header: "Side",
+      size: 80,
+      meta: {
+        filterType: "enum",
+        filterOptions: [
+          { label: "Call", value: "call" },
+          { label: "Put", value: "put" },
+        ],
+      },
+      cell: ({ getValue }) => {
+        const val = getValue() as string;
+        const isCall = val === "call";
+        return (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              padding: "2px 6px",
+              background: isCall ? "var(--call-dim)" : "var(--put-dim)",
+              color: isCall ? "var(--call)" : "var(--put)",
+              textTransform: "uppercase",
+            }}
+          >
+            {val}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      size: 90,
+      meta: {
+        filterType: "enum",
+      },
+      cell: ({ getValue }) => (
+        <span style={{ color: "var(--text-mid)", textTransform: "capitalize" }}>{getValue()}</span>
+      ),
+    },
+    {
+      accessorKey: "strike",
+      header: "Strike",
+      size: 90,
+      meta: {
+        filterType: "numericRange",
+        isNumeric: true,
+      },
+      cell: ({ getValue }) => <span className="num" style={{ color: "var(--text-hi)" }}>{fmtK(getValue())}</span>,
+    },
+    {
+      accessorKey: "expiry_days",
+      header: "Expiry",
+      size: 80,
+      meta: {
+        filterType: "numericRange",
+        isNumeric: true,
+      },
+      cell: ({ getValue }) => <span style={{ color: "var(--text-mid)" }}>{getValue()}D</span>,
+    },
+    {
+      accessorKey: "contracts",
+      header: "Qty",
+      size: 70,
+      meta: {
+        filterType: "numericRange",
+        isNumeric: true,
+      },
+      cell: ({ getValue }) => <span className="num" style={{ color: "var(--text-hi)" }}>{getValue()}</span>,
+    },
+    {
+      id: "entry_premium",
+      header: "Entry",
+      size: 100,
+      accessorFn: (r) => r.entry_premium * r.contracts,
+      meta: {
+        filterType: "numericRange",
+        isNumeric: true,
+        exportValue: (r) => r.entry_premium * r.contracts,
+      },
+      cell: ({ getValue }) => <span className="num" style={{ color: "var(--text-hi)" }}>${fmtN(getValue(), 2)}</span>,
+    },
+    {
+      id: "close_premium",
+      header: "Close",
+      size: 100,
+      accessorFn: (r) => (r.close_premium !== null ? r.close_premium * r.contracts : null),
+      meta: {
+        filterType: "numericRange",
+        isNumeric: true,
+        exportValue: (r) => (r.close_premium !== null ? r.close_premium * r.contracts : ""),
+      },
+      cell: ({ getValue }) => {
+        const val = getValue();
+        return <span className="num" style={{ color: "var(--text-hi)" }}>{val === null ? "—" : `$${fmtN(val, 2)}`}</span>;
+      },
+    },
+    {
+      accessorKey: "realized_pnl",
+      header: "Realized P&L",
+      size: 120,
+      meta: {
+        filterType: "numericRange",
+        isNumeric: true,
+        exportValue: (r) => r.realized_pnl ?? "",
+      },
+      cell: ({ getValue }) => {
+        const val = getValue() as number | null;
+        if (val === null || val === undefined) return <span className="num" style={{ color: "var(--text-lo)" }}>—</span>;
+        const isPos = val >= 0;
+        return (
+          <span className="num" style={{ fontWeight: 600, color: isPos ? "var(--call)" : "var(--put)" }}>
+            {isPos ? "+" : "−"}${fmtN(Math.abs(val), 2)}
+          </span>
+        );
+      },
+    },
+  ], []);
+
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", marginBottom: 20 }}>
       <div>
