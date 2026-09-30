@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useSpotFeed, type SpotFeedStatus } from "../hooks/useSpotFeed";
 import type { SpotResponse } from "../api/types";
 import { broadcast, onTabMessage } from "../tabs/channel";
@@ -103,10 +103,20 @@ export function SpotFeedProvider({ children }: { children: React.ReactNode }) {
     return () => cancelAnimationFrame(id);
   }, [leader, validatedData]);
 
-  const value: SpotFeedData =
-    leader === false
-      ? { data: relayed, status: relayed ? "open" : "connecting", request }
-      : { data: validatedData, status: rawFeed.status, request };
+  // Memoize the context value to prevent all consumers from re-rendering
+  // when the provider re-renders for unrelated reasons.  Each field is a
+  // stable reference (request is useCallback'd; data/status only change
+  // when new WS frames arrive), so the memo hit rate is high.
+  const followerData = leader === false ? relayed : null;
+  const followerStatus: SpotFeedStatus = relayed ? "open" : "connecting";
+  const value = useMemo<SpotFeedData>(
+    () =>
+      leader === false
+        ? { data: followerData, status: followerStatus, request }
+        : { data: validatedData, status: rawFeed.status, request },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [leader, followerData, followerStatus, validatedData, rawFeed.status, request],
+  );
   return <SpotFeedContext.Provider value={value}>{children}</SpotFeedContext.Provider>;
 }
 

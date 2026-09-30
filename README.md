@@ -58,6 +58,8 @@ npm run lint     # next lint
 npm test         # vitest unit tests
 ```
 
+A render performance harness (dev-only) lives at `http://localhost:3000/__perf` — drives four scripted tick sequences through real components and exports JSON metrics. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full guide, hotspot fixes, and CI setup.
+
 ## Pages
 
 | Route | What's there |
@@ -226,7 +228,7 @@ npm test          # node:test unit suite (attribution, analytics, expiry, alertR
 ## Known gaps
 
 - Unit tests cover heat scales, candles, vol-surface mesh, and scenario grid
-  (`npm test`). No Playwright e2e suite yet.
+  (`npm test`). General Playwright e2e suite not yet in CI (keyboard/drag flows).
 - No RTL / component test suite yet (pure lib modules are covered).
 - PWA: hand-written `public/sw.js` (no Serwist/Workbox dependency), production-only registration, SVG icons only (no PNG set), no Playwright offline tests and no Lighthouse run yet. Only last-known public spot prices are snapshotted (IndexedDB, wiped on disconnect); positions/account are not cached.
 - Playwright e2e keyboard/drag flows are not in CI yet; unit coverage is via vitest.
