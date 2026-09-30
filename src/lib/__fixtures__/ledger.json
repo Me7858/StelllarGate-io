@@ -1,0 +1,69 @@
+{
+  "history": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001", "wallet_address": "GTESTWALLETADDRESS", "underlying": "XLM",
+      "strike": 0.12, "expiry_days": 30, "option_type": "call", "position_type": "long", "contracts": 1000,
+      "entry_premium": 0.0031, "entry_spot": 0.118, "collateral": 0, "status": "closed",
+      "close_premium": 0.0052, "close_spot": 0.125, "realized_pnl": 2.1,
+      "opened_at": "2026-01-05T14:30:00.250Z", "closed_at": "2026-02-10T09:15:30.999Z", "strategy_id": null
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002", "wallet_address": "GTESTWALLETADDRESS", "underlying": "BTC",
+      "strike": 60000, "expiry_days": 30, "option_type": "put", "position_type": "short", "contracts": 0.5,
+      "entry_premium": 1200.5, "entry_spot": 65000, "collateral": 33000, "status": "rolled",
+      "close_premium": 1800.25, "close_spot": 61000, "realized_pnl": -299.875,
+      "opened_at": "2026-01-20T08:00:00.000Z", "closed_at": "2026-02-20T10:00:00.120Z", "strategy_id": null
+    },
+    {
+      "id": "a1b2c3d4-0003-4000-8000-000000000003", "wallet_address": "GTESTWALLETADDRESS", "underlying": "BTC",
+      "strike": 57000, "expiry_days": 60, "option_type": "put", "position_type": "short", "contracts": 0.5,
+      "entry_premium": 2100, "entry_spot": 61000, "collateral": 31350, "status": "closed",
+      "close_premium": 900.1, "close_spot": 66000, "realized_pnl": 599.95,
+      "opened_at": "2026-02-20T10:00:00.140Z", "closed_at": "2026-03-15T16:45:00.000Z", "strategy_id": null
+    },
+    {
+      "id": "a1b2c3d4-0004-4000-8000-000000000004", "wallet_address": "GTESTWALLETADDRESS", "underlying": "ETH",
+      "strike": 3800, "expiry_days": 14, "option_type": "call", "position_type": "short", "contracts": 2,
+      "entry_premium": 45.1, "entry_spot": 3500, "collateral": 7000, "status": "rolled",
+      "close_premium": 30.2, "close_spot": 3450, "realized_pnl": 29.8,
+      "opened_at": "2026-02-25T12:00:00.000Z", "closed_at": "2026-03-01T12:00:00.500Z", "strategy_id": "strat-eth-1"
+    },
+    {
+      "id": "a1b2c3d4-0005-4000-8000-000000000005", "wallet_address": "GTESTWALLETADDRESS", "underlying": "SOL",
+      "strike": 170, "expiry_days": 180, "option_type": "put", "position_type": "long", "contracts": 3,
+      "entry_premium": 0.1, "entry_spot": 182, "collateral": 0, "status": "closed",
+      "close_premium": 0.3, "close_spot": 150, "realized_pnl": 0.6,
+      "opened_at": "2025-01-10T00:00:00.000Z", "closed_at": "2026-03-20T00:00:00.000Z", "strategy_id": null
+    },
+    {
+      "id": "a1b2c3d4-0006-4000-8000-000000000006", "wallet_address": "GTESTWALLETADDRESS", "underlying": "XLM",
+      "strike": 0.1, "expiry_days": 7, "option_type": "put", "position_type": "long", "contracts": 500,
+      "entry_premium": 0.002, "entry_spot": 0.11, "collateral": 0, "status": "closed",
+      "close_premium": 0.0005, "close_spot": 0.115, "realized_pnl": -0.75,
+      "opened_at": "2026-03-28T00:00:00.000Z", "closed_at": "2026-04-01T00:00:00.000Z", "strategy_id": null
+    },
+    {
+      "id": "a1b2c3d4-0007-4000-8000-000000000007", "wallet_address": "GTESTWALLETADDRESS", "underlying": "ETH",
+      "strike": 3400, "expiry_days": 30, "option_type": "call", "position_type": "long", "contracts": 1,
+      "entry_premium": 120, "entry_spot": 3300, "collateral": 0, "status": "closed",
+      "close_premium": 80, "close_spot": 3250, "realized_pnl": -40,
+      "opened_at": "2025-12-01T00:00:00.000Z", "closed_at": "2025-12-31T23:59:59.999Z", "strategy_id": null
+    }
+  ],
+  "open": [
+    {
+      "id": "a1b2c3d4-0008-4000-8000-000000000008", "wallet_address": "GTESTWALLETADDRESS", "underlying": "ETH",
+      "strike": 3900, "expiry_days": 30, "option_type": "call", "position_type": "short", "contracts": 2,
+      "entry_premium": 52.3, "entry_spot": 3450, "collateral": 6900, "status": "open",
+      "close_premium": null, "close_spot": null, "realized_pnl": null,
+      "opened_at": "2026-03-01T12:00:00.520Z", "closed_at": null, "strategy_id": "strat-eth-1"
+    },
+    {
+      "id": "a1b2c3d4-0009-4000-8000-000000000009", "wallet_address": "GTESTWALLETADDRESS", "underlying": "ETH",
+      "strike": 3900, "expiry_days": 30, "option_type": "call", "position_type": "short", "contracts": 2,
+      "entry_premium": 52.3, "entry_spot": 3450, "collateral": 6900, "status": "open",
+      "close_premium": null, "close_spot": null, "realized_pnl": null,
+      "opened_at": "2026-03-01T12:00:03.000Z", "closed_at": null, "strategy_id": null
+    }
+  ]
+}

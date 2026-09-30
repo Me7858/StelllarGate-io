@@ -35,7 +35,7 @@ the payoff diagram still uses local math (`src/lib/payoff.ts`).
 
 ```bash
 npm install
-cp .env.local.example .env.local
+cp .env.local.example .env.local   # see "Environment" below
 npm run dev
 # http://localhost:3000
 ```
@@ -157,16 +157,25 @@ retry, an empty state with a next step, or the data. The pieces are:
 - All copy lives in `content/<locale>/*.json` (glossary, tour, trade
   templates), ready for i18n.
 
+### Environment
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | client + server | Backend base URL (default `http://localhost:8081`) |
+| `NEXT_PUBLIC_SITE_URL` | client + server | Public origin of this frontend, for absolute share-link and OG image URLs (default `http://localhost:3000`) |
+| `SHARE_SIGNING_SECRET` | **server only** | ≥ 32-char HMAC key that signs share-card links. Never give it a `NEXT_PUBLIC_` prefix. Generate with `openssl rand -base64 48`. Without it, sharing returns 503 and everything else works. Rotating it invalidates every existing share link. |
+
 ## Pages
 
 | Route | What's there |
 |---|---|
 | `/` | Marketing/landing page, live preview chain, watchlist |
 | `/options` | The terminal: chain, positions, strategy builder, vol surface, customizable workspace (≥1024px) |
-| `/portfolio` | Open positions marked-to-market, partial/batch/strategy close, roll, CSV export, portfolio risk, P&L attribution |
-| `/history` | Full trade ledger (opens + closes) with realized P&L stats, performance analytics (equity curve, drawdown, breakdowns) |
+| `/portfolio` | Open positions marked-to-market, partial/batch/strategy close, roll, CSV export, collateral & margin dashboard, portfolio-wide risk panel with probability analytics, P&L attribution |
+| `/history` | Full trade ledger (opens + closes) with realized P&L stats, performance analytics (equity curve, drawdown, breakdowns), period statements (CSV/PDF), per-trade share cards |
 | `/calendar` | Expiry calendar (month/list), settlement center, `.ics` download |
 | `/docs` | MDX protocol documentation hub with interactive calculators (BS pricer, collateral, payoff playground) |
+| `/share/[id]` | Public page for a signed share card, with Open Graph / Twitter previews |
 
 The `/options` page is tabbed below 1024px (and via the Tabs toggle):
 
@@ -175,7 +184,7 @@ The `/options` page is tabbed below 1024px (and via the Tabs toggle):
   "Manage →" links to `/portfolio` for the actual close/roll actions.
 - **Strategies** — templated multi-leg trades (straddle, bull call spread,
   bear put spread, iron condor) with a combined payoff diagram, executed
-  atomically.
+  atomically. Previews can be shared as a card.
 - **Surface** — an IV heatmap across strikes and expiries, with a simple
   term-structure model (skew dampens for longer-dated options).
 
@@ -224,7 +233,11 @@ src/
 │   ├── portfolio/        # Open positions, roll, close, attribution, partial/batch/strategy close
 │   ├── history/          # Trade ledger + performance analytics
 │   ├── calendar/         # Expiry calendar + settlement center
-│   └── docs/             # MDX protocol documentation pages
+│   ├── share/[id]/       # Public share-card page (OG/Twitter meta)
+│   ├── docs/             # MDX protocol documentation pages
+│   └── api/
+│       ├── share/        # POST: build + sign a share card from trusted data
+│       └── og/trade/     # GET: edge-rendered card PNG (next/og) + bundled fonts
 ├── components/           # UI components (charts, dialogs, header, etc.)
 │   ├── env/              # Environment banner, selector, mode stamp, mainnet switch dialog
 │   ├── states/           # Skeleton / EmptyState / ErrorState / AuthGate / DataBoundary
@@ -247,21 +260,26 @@ src/
     │   ├── EnvironmentContext.tsx  # active mode, guarded switching, wallet-network checks
     │   ├── BackendDataContext.tsx  # one shared account/positions/watchlist/alerts instance
     │   └── SpotFeedContext.tsx     # one shared WebSocket connection app-wide
-    ├── store/             # zustand + persist — now just wallet.ts (connect,
-    │                      # sign-in-with-backend, bearer token; persisted per mode)
+    ├── store/             # zustand + persist — wallet.ts (connect, sign-in,
+    │                      # bearer token; persisted per mode) and
+    │                      # collateralSettings.ts (warning thresholds)
     ├── pricing.ts        # Black-Scholes, vol smile — fallback/preview layer, see above
     ├── attribution.ts    # Taylor Greek P&L attribution (local baselines)
     ├── analytics.ts      # Equity curve, drawdown, trade statistics
     ├── expiry.ts         # Expiry derivation, grouping, .ics, settlement helpers
     ├── alertRules.ts     # Client-side alert rule evaluator (hysteresis/cooldown)
-    ├── collateral.ts     # Collateral requirements (100% calls, 110% puts)
+    ├── collateral.ts     # Collateral requirements (100% calls, 110% puts) +
+    │                     # dashboard selectors: utilization, reconciliation, what-if
+    ├── probability.ts    # Lognormal PoP / P(ITM) / EV / expected move
+    ├── statements.ts     # Period ledger, summaries, statement CSV + PDF
+    ├── share/            # Signed share-card payloads, card builder, card artwork
     ├── payoff.ts          # Multi-leg combined payoff math (local; backend equivalent unused)
     ├── risk.ts             # Whole-portfolio risk + mark-to-model scenarioGrid
     ├── heatScale.ts       # Colorblind-safe chain heat scales + contrast checks
     ├── candles.ts         # Tick→OHLC aggregation, SMA/EMA, realized vol
     ├── volSurface.ts      # Term-structure IV surface grid + WebGL mesh
     ├── strategies.ts      # Multi-leg strategy templates
-    ├── csv.ts / notify.ts # CSV export, browser + in-app notifications
+    ├── csv.ts / notify.ts # CSV export (injection-safe), browser + in-app notifications
     ├── useHydrated.ts     # SSR-hydration-safety hook (see below) — still relevant for wallet.ts
     ├── useCandleHistory.ts # Candle history (API or limited WS seed)
     └── usePriceHistory.ts # Legacy in-memory spot sparkline buffer
@@ -336,8 +354,126 @@ and falls back:
 npm test          # node:test unit suite (attribution, analytics, expiry, alertRules)
 ```
 
+## Probability analytics
+
+`src/lib/probability.ts` puts odds on the payoff curves: probability of
+profit, probability ITM (single legs), expected value, and ±1σ/±2σ
+expected-move ranges. They're shown in the order ticket, the strategy
+preview and the portfolio risk panel, and every payoff diagram has a
+**Prob.** toggle that overlays the density and the σ bands.
+
+Assumptions (also in the in-app ⓘ tooltip):
+
+- Risk-neutral lognormal spot at expiry, drift r = 5% (the rate the chain
+  is priced with): market-implied odds, not a forecast.
+- Flat IV by default. **Smile** mode uses the strike-specific smile vol for
+  the P(ITM)/PoP edges; EV, the density and the σ bands always use flat IV.
+- PoP sums the probability mass of every interval between breakevens
+  where the payoff is positive, so condors and straddles work. The
+  breakevens come from `riskProfile`.
+- EV is E[payoff] − premium, undiscounted, integrated with Simpson's rule
+  in log-space and truncated at ±6σ, so unbounded payoffs stay finite.
+- In the portfolio panel, positions with different expiries are measured
+  at the nearest one. Account-wide EV is summed across underlyings,
+  because EV is additive. PoP isn't, so it's shown per underlying only.
+
+## Collateral & margin
+
+The **Collateral & Margin** panel on `/portfolio` shows balance, locked
+collateral, free capital and utilization as a threshold-colored gauge. It
+also has a sortable per-position table (collateral, share of total,
+premium yield, return on collateral, days held, buying power freed on
+close), a what-if for a new write or a close, and a reconciliation check.
+
+- **Account semantics** (from the backend): `balance` is total cash and
+  *includes* locked collateral. Free capital is `balance −
+  collateral_locked` (the backend's buying-power check), and utilization is
+  `collateral_locked / balance`.
+- **Per-position collateral** is the amount the backend locked **at entry**
+  (calls: contracts × entry spot; puts: 110% × strike). It isn't re-marked
+  as spot moves. Hovering the amount shows what the same write would lock
+  at today's spot.
+- **Reconciliation** compares Σ per-position collateral (compensated
+  summation) with the account's `collateral_locked`, within a half-cent
+  tolerance. `/positions` is now paged through fully, since the default
+  50-row page would otherwise truncate larger books.
+- **Warnings**: warning and critical thresholds (default 80% / 95%) are set
+  per browser. At or above a threshold, a badge appears in the header.
+  Escalating to a higher level fires one browser notification, and it
+  re-arms once utilization drops back.
+
+## Statements
+
+On `/history`, **Statements** exports a period ledger for accounting:
+month, quarter, year or a custom range, optionally for one underlying, as
+CSV or a client-side PDF (summary page plus paginated detail). `pdf-lib`
+loads lazily, only on the first PDF export.
+
+- **Scope**: realized lots only (`closed` and `rolled` rows), assigned to
+  the period their **close** falls in. Periods are UTC midnights, with an
+  exclusive end.
+- **Rolls are two ledger events.** The rolled lot closes with its own
+  realized P&L (`Event = roll`). The replacement is a separate lot whose
+  holding period starts at the roll, not at the original open. The two are
+  cross-referenced in **Linked Position**, matched by same contract terms
+  and strategy, opened within 5 s of the roll.
+- **Determinism**: the same inputs produce byte-identical CSV and PDF,
+  independent of the machine's time zone.
+- **CSV injection**: text cells starting with `=` `+` `-` `@`, tab or CR
+  are prefixed with `'` (OWASP). Plain numbers are left alone.
+- Not tax advice. There are no jurisdiction-specific rules, and the
+  disclaimer is on the panel and in every PDF. See
+  [docs/samples/statement-2026Q1.pdf](docs/samples/statement-2026Q1.pdf).
+
+Statement CSV columns:
+
+| Column | Meaning |
+|---|---|
+| Position ID | Backend position id (one lot) |
+| Event | `close`, or `roll` for a lot closed by a roll |
+| Opened (UTC) / Closed (UTC) | ISO-8601, second precision, `Z` |
+| Underlying, Type, Side | e.g. `BTC`, `short`, `put` |
+| Strike, Contracts | As traded |
+| Premium Paid | Long: entry premium × contracts. Short: buy-back cost at close |
+| Premium Received | Long: close premium × contracts. Short: premium collected at open |
+| Fees | Always `0.00`; the backend charges none today |
+| Cost Basis | Premium Paid + Fees |
+| Proceeds | Premium Received |
+| Realized P&L | Proceeds − Cost Basis (matches the backend's `realized_pnl`) |
+| Holding Days | Whole days elapsed, open → close |
+| Term | `long-term` if closed more than one calendar year after opening, else `short-term` |
+| Linked Position | The other lot of a roll, if any |
+
+Amounts use up to 8 decimals with trailing zeros trimmed (minimum 2).
+
+## Share cards
+
+History rows and strategy previews have a **Share** button. It creates a
+link to `/share/[id]` with rich Open Graph/Twitter previews, plus a
+downloadable 1200×630 card image. Samples:
+[trade](docs/samples/share-card-trade.png),
+[strategy](docs/samples/share-card-strategy.png).
+
+- **Stateless and signed**: `id = base64url(payload).base64url(HMAC-SHA256)`,
+  verified in constant time on every render. A tampered id returns 400 or
+  404.
+- **Card contents come from trusted data only.** `POST /api/share` looks
+  the trade up in the sharer's own ledger via the backend, using their
+  bearer token, or reprices a strategy template at the backend's spot.
+  Numbers sent by the client are never signed.
+- **Privacy**: dollar P&L and contract size are hidden by default. The
+  wallet is off by default and only ever appears truncated (`GABC…WXYZ`).
+  A full address is rejected at parse time. Hidden fields are omitted from
+  the signed payload itself, and the sparkline is pre-normalized, so no
+  premiums or sizes travel in the URL.
+- The OG image renders on the edge runtime with local OFL fonts
+  (`src/app/api/og/trade/fonts`). It is cached for a day in browsers and a
+  week at the CDN, so rotating the secret retires old cards in bounded time.
+
 ## Known gaps
 
+- No rate limiting on `POST /api/share`. Trade shares require a valid
+  backend session; strategy shares don't.
 - The iPhone 13 (WebKit) Playwright project needs WebKit's system libraries,
   so it runs in CI. Its visual baseline has to be generated there (or on a
   machine with them) before its visual test stops being skipped.

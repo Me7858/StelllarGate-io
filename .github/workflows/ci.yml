@@ -1,28 +1,31 @@
-# .github/workflows/ci.yml
-#
-# Main CI pipeline — runs on every PR and on pushes to main.
-# Jobs run in parallel; total wall-clock time target is < 10 minutes.
-#
-# Job graph:
-#
-#   setup (implicit in each job via composite action)
-#   ├── lint        — next lint, zero warnings
-#   ├── typecheck   — tsc --noEmit
-#   ├── unit        — Jest with coverage upload
-#   └── build       — next build (restores .next/cache)
-#
-# Bundle budget reporting runs as a separate workflow (bundle.yml) so it can
-# post PR comments independently.  If you prefer a single file you can inline
-# the bundle job here and add `needs: [build]`.
-#
-# See CONTRIBUTING.md §CI for branch protection setup.
+    branches: [main]
 
+# Cancel superseded runs on the same ref so each push only bills one run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege permissions; individual jobs add what they need.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write  # for posting VRT diff comments
+
+env:
+  # Required by Next.
+
+jobs:
+  check:
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+
+jobs:
+  check:
     branches: [main]
 
 # Cancel superseded runs on the same ref so each push only bills one run.
@@ -142,6 +145,28 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      - run: npx playwright install --with-deps chromium webkit
+      # RECORD=1 keeps a video of every test; they're uploaded bel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
       - run: npx playwright install --with-deps chromium webkit
       # RECORD=1 keeps a video of every test; they're uploaded below as the
       # PR's recordings of the tour, the mode switch and the phone trade flow.

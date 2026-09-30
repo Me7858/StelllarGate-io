@@ -39,7 +39,12 @@ export const EXPIRIES: Expiry[] = [
   { label: "180D", days: 180 },
 ];
 
-function normCDF(x: number): number {
+// Flat risk-free rate used by bs() below and by the lognormal terminal
+// distribution in probability.ts — matches the backend's hardcoded r=0.05.
+export const RISK_FREE_RATE = 0.05;
+
+// Abramowitz–Stegun 26.2.17 approximation, |error| < 7.5e-8.
+export function normCDF(x: number): number {
   if (x < -7) return 0;
   if (x > 7) return 1;
   const k = 1 / (1 + 0.2316419 * Math.abs(x));
@@ -48,7 +53,7 @@ function normCDF(x: number): number {
   return x >= 0 ? 1 - pdf * p : pdf * p;
 }
 
-function normPDF(x: number): number {
+export function normPDF(x: number): number {
   return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
 }
 
@@ -58,9 +63,10 @@ export function bs(S: number, K: number, vol: number, t: number, isCall: boolean
     return { premium: p, delta: isCall ? 1 : -1, gamma: 0, theta: 0, vega: 0, iv: vol };
   }
   const st = Math.sqrt(t);
-  const d1 = (Math.log(S / K) + (0.05 + 0.5 * vol * vol) * t) / (vol * st);
+  const r = RISK_FREE_RATE;
+  const d1 = (Math.log(S / K) + (r + 0.5 * vol * vol) * t) / (vol * st);
   const d2 = d1 - vol * st;
-  const disc = Math.exp(-0.05 * t);
+  const disc = Math.exp(-r * t);
   const pdf = normPDF(d1);
   const premium = isCall
     ? S * normCDF(d1) - K * disc * normCDF(d2)
@@ -68,8 +74,8 @@ export function bs(S: number, K: number, vol: number, t: number, isCall: boolean
   const delta = isCall ? normCDF(d1) : normCDF(d1) - 1;
   const gamma = pdf / (S * vol * st);
   const theta = isCall
-    ? (-(S * pdf * vol) / (2 * st) - 0.05 * K * disc * normCDF(d2)) / 365
-    : (-(S * pdf * vol) / (2 * st) + 0.05 * K * disc * normCDF(-d2)) / 365;
+    ? (-(S * pdf * vol) / (2 * st) - r * K * disc * normCDF(d2)) / 365
+    : (-(S * pdf * vol) / (2 * st) + r * K * disc * normCDF(-d2)) / 365;
   return { premium: Math.max(0, premium), delta, gamma, theta, vega: (S * pdf * st) / 100, iv: vol };
 }
 
