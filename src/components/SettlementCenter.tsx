@@ -25,7 +25,7 @@ function truncateHash(hash: string): string {
 }
 
 export function SettlementCenter() {
-  const token = useWalletStore(s => s.token);
+  const token = useWalletStore(s => s.session);
   const { refreshAccount } = useBackendData();
   const { entries, loading, refresh, claim, reclaim, claimBatch } = useBackendSettlement(token);
 

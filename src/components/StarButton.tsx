@@ -6,7 +6,7 @@ import { useWalletStore } from "../lib/store/wallet";
 import { ApiError } from "../lib/api/client";
 
 export function StarButton({ sym }: { sym: string }) {
-  const token = useWalletStore(s => s.token);
+  const token = useWalletStore(s => s.session);
   const { watchlist, addToWatchlist, removeFromWatchlist } = useBackendData();
   const [pending, setPending] = useState(false);
   const isFavorite = watchlist.some(w => w.underlying === sym);

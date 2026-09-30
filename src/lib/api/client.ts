@@ -7,6 +7,7 @@ import { ContractError, reportContractError } from "./contractError";
 type Schema<T> = z.ZodType<T, z.ZodTypeDef, unknown>;
 
 import { activeStellarNetwork, env } from "../../env";
+import { BFF_PREFIX, BFF_SESSION_ROUTE, CSRF_COOKIE, CSRF_HEADER } from "../bff/constants";
 
 interface RuntimeConfig {
   apiUrl: string;
@@ -44,9 +45,22 @@ export class ApiError extends Error {
 }
 
 /**
+ * Authentication goes through the BFF (#118). In the browser every request
+ * is sent to `/api/bff/<backend path>`, a same-origin route handler that
+ * attaches the bearer token from an encrypted httpOnly cookie. JavaScript
+ * never sees the token.
+ *
+ * The `token` parameter the api/* helpers still take is now a non-secret
+ * *session marker* (BFF_SESSION_MARKER from the wallet store). It only
+ * signals "this call expects a session" for 401 recovery. The cookie is
+ * what actually authenticates.
+ */
+type AuthFlag = string | boolean | null | undefined;
+
+/**
  * Injected by the wallet store (keeps this layer from importing it and
- * creating a cycle). Resolves to a fresh token, or null if the user
- * rejected / re-auth failed.
+ * creating a cycle). Resolves truthy once a fresh session cookie is set,
+ * or null if the user rejected / re-auth failed.
  */
 type UnauthorizedHandler = () => Promise<string | null>;
 let onUnauthorized: UnauthorizedHandler | null = null;
@@ -69,14 +83,58 @@ function reauthenticate(): Promise<string | null> {
   return reauthInFlight;
 }
 
-async function request<T>(path: string, init: RequestInit, token?: string | null, schema?: Schema<T>, retried = false): Promise<T> {
+const isBrowser = () => typeof window !== "undefined";
+
+/** Reads the (intentionally JS-readable) double-submit CSRF cookie. */
+export function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  for (const part of document.cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === CSRF_COOKIE.secure || name === CSRF_COOKIE.insecure) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
+let csrfBootstrap: Promise<void> | null = null;
+
+/** GET /api/bff/session mints the CSRF cookie if it's missing. */
+export async function ensureCsrfToken(): Promise<string | null> {
+  const existing = readCsrfCookie();
+  if (existing) return existing;
+  csrfBootstrap ??= fetch(BFF_SESSION_ROUTE, { credentials: "same-origin", cache: "no-store" })
+    .then(() => undefined)
+    .finally(() => {
+      csrfBootstrap = null;
+    });
+  await csrfBootstrap;
+  return readCsrfCookie();
+}
+
+const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Low-level authed fetch. In the browser it goes through the BFF and adds
+ * CSRF headers. On the server it calls the backend directly and without
+ * auth: server renders never carry a user session.
+ */
+export async function bffFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
-  if (token) headers.set("authorization", `Bearer ${token}`);
+  if (!isBrowser()) {
+    const { apiUrl } = await getRuntimeConfig();
+    return fetch(`${apiUrl}${path}`, { ...init, headers });
+  }
+  if (MUTATING.has(method)) {
+    const csrf = await ensureCsrfToken();
+    if (csrf) headers.set(CSRF_HEADER, csrf);
+  }
+  return fetch(`${BFF_PREFIX}${path}`, { ...init, headers, credentials: "same-origin", cache: "no-store" });
+}
 
-  const { apiUrl } = await getRuntimeConfig();
-  const res = await fetch(`${apiUrl}${path}`, { ...init, headers });
+async function request<T>(path: string, init: RequestInit, token?: AuthFlag, schema?: Schema<T>, retried = false): Promise<T> {
+  const res = await bffFetch(path, init);
 
-  // Only authed requests are recovered; auth endpoints (nonce/verify) never loop.
+  // Only authed requests are recovered; auth endpoints (nonce) never loop.
   if (res.status === 401 && token && !retried && !path.startsWith("/api/v1/auth/")) {
     const fresh = await reauthenticate();
     if (!fresh) throw new ApiError(401, "Session expired");
@@ -114,11 +172,11 @@ async function request<T>(path: string, init: RequestInit, token?: string | null
   return parsed.data;
 }
 
-export function apiGet<T>(path: string, token?: string | null, schema?: Schema<T>): Promise<T> {
+export function apiGet<T>(path: string, token?: AuthFlag, schema?: Schema<T>): Promise<T> {
   return request<T>(path, { method: "GET" }, token, schema);
 }
 
-export function apiPost<T>(path: string, body?: unknown, token?: string | null, schema?: Schema<T>): Promise<T> {
+export function apiPost<T>(path: string, body?: unknown, token?: AuthFlag, schema?: Schema<T>): Promise<T> {
   return request<T>(
     path,
     {
@@ -131,10 +189,16 @@ export function apiPost<T>(path: string, body?: unknown, token?: string | null, 
   );
 }
 
-export function apiDelete<T>(path: string, token?: string | null): Promise<T> {
+export function apiDelete<T>(path: string, token?: AuthFlag): Promise<T> {
   return request<T>(path, { method: "DELETE" }, token);
 }
 
+/**
+ * WebSocket URL. The spot/chain feeds are public, so they connect straight
+ * to the backend and need no auth ticket. If an authed feed is ever added,
+ * mint a short-lived ticket via a BFF route rather than sending the session
+ * cookie cross-origin (see README → Session & hydration).
+ */
 export async function wsUrl(path: string): Promise<string> {
   const { apiUrl } = await getRuntimeConfig();
   return `${apiUrl.replace(/^http/, "ws")}${path}`;
