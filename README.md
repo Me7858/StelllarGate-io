@@ -176,15 +176,30 @@ retry, an empty state with a next step, or the data. The pieces are:
 | `/calendar` | Expiry calendar (month/list), settlement center, `.ics` download |
 | `/docs` | MDX protocol documentation hub with interactive calculators (BS pricer, collateral, payoff playground) |
 | `/share/[id]` | Public page for a signed share card, with Open Graph / Twitter previews |
+| `/notifications` | Full notification history with filters, and per-category browser notification preferences |
+
+Every page's header also has a **watchlist** menu and a **notification
+bell** (see below).
 
 The `/options` page is tabbed below 1024px (and via the Tabs toggle):
 
 - **Chain** — configurable columns, strike windows (±N / delta), ATM jump, optional dual-expiry compare. Click an ask to buy, a bid to write.
 - **Positions** — quick view of open positions for the selected symbol;
   "Manage →" links to `/portfolio` for the actual close/roll actions.
-- **Strategies** — templated multi-leg trades (straddle, bull call spread,
-  bear put spread, iron condor) with a combined payoff diagram, executed
-  atomically. Previews can be shared as a card.
+- **Strategies** — 15 templated multi-leg structures (straddle, strangles,
+  verticals, butterflies, iron condor/butterfly, collar, ratio spreads,
+  call calendar/diagonal, jade lizard), each tagged with outlook, vol view
+  and defined/undefined risk. Picking one resolves it onto the chain's
+  listed strikes in an editable builder (flip legs, step strikes, per-leg
+  expiry, add/remove legs) with a combined payoff diagram; legs execute
+  atomically. Undefined-risk positions show a warning and need an explicit
+  acknowledgement to execute. Calendars/diagonals chart P&L at the nearest
+  expiry with the longer-dated leg marked to model. Previews can be shared as a card.
+- **Finder** — state an outlook, a target price (drag the marker on the
+  chart) and date, a max loss and a budget; it ranks candidate strategies
+  from the library across listed strikes/expiries by probability of
+  profit, P&L at target and return on risk, in a Web Worker. "Load →"
+  opens a candidate in the builder.
 - **Surface** — an IV heatmap across strikes and expiries, with a simple
   term-structure model (skew dampens for longer-dated options).
 
@@ -238,6 +253,9 @@ src/
 │   └── api/
 │       ├── share/        # POST: build + sign a share card from trusted data
 │       └── og/trade/     # GET: edge-rendered card PNG (next/og) + bundled fonts
+├── features/
+│   └── finder/           # Strategy finder: engine.ts (generate/prune/score),
+│                         # finder.worker.ts, useStrategyFinder, UI
 ├── components/           # UI components (charts, dialogs, header, etc.)
 │   ├── env/              # Environment banner, selector, mode stamp, mainnet switch dialog
 │   ├── states/           # Skeleton / EmptyState / ErrorState / AuthGate / DataBoundary
@@ -274,11 +292,18 @@ src/
     ├── statements.ts     # Period ledger, summaries, statement CSV + PDF
     ├── share/            # Signed share-card payloads, card builder, card artwork
     ├── payoff.ts          # Multi-leg combined payoff math (local; backend equivalent unused)
-    ├── risk.ts             # Whole-portfolio risk + mark-to-model scenarioGrid
+    ├── risk.ts             # Whole-portfolio risk: groups all open positions per
+    │                       # underlying into one payoff curve, stress-tests the
+    │                       # account across a spot-shock grid; mark-to-model scenarioGrid
     ├── heatScale.ts       # Colorblind-safe chain heat scales + contrast checks
     ├── candles.ts         # Tick→OHLC aggregation, SMA/EMA, realized vol
-    ├── volSurface.ts      # Term-structure IV surface grid + WebGL mesh
-    ├── strategies.ts      # Multi-leg strategy templates
+    ├── volSurface.ts      # Term-structure-aware IV surface grid + WebGL mesh
+    ├── strategies.ts      # Strategy templates + metadata, dev-time validation,
+    │                      # strike resolution onto listed strikes
+    ├── notifications/     # Event bus, per-wallet IndexedDB store, producers,
+    │                      # browser-notification prefs, server WS contract
+    ├── watchlists/        # Multi-list watchlists: provider (server or local
+    │                      # mode, optimistic updates) and pure list ops
     ├── csv.ts / notify.ts # CSV export (injection-safe), browser + in-app notifications
     ├── useHydrated.ts     # SSR-hydration-safety hook (see below) — still relevant for wallet.ts
     ├── useCandleHistory.ts # Candle history (API or limited WS seed)
@@ -469,6 +494,36 @@ downloadable 1200×630 card image. Samples:
 - The OG image renders on the edge runtime with local OFL fonts
   (`src/app/api/og/trade/fonts`). It is cached for a day in browsers and a
   week at the CDN, so rotating the secret retires old cards in bounded time.
+
+### Notifications
+
+Producers publish to an event bus (`src/lib/notifications/bus.ts`) and
+`NotificationsProvider` persists each event in IndexedDB per wallet (last
+500), deduplicated by `dedupeKey` so several tabs observing the same alert
+record it once; other tabs are synced over `BroadcastChannel`. Producers:
+fills/closes/rolls (from `BackendDataContext`), triggered alerts, expiry
+reminders (24h and 1h), session expiry/sign-out, and spot-feed outages.
+Server-pushed notifications aren't implemented; the intended
+`/api/v1/ws/notifications` frame format is in `serverContract.ts`.
+
+### Watchlists
+
+Favorites (the backend's existing single-set `/api/v1/watchlist`) still
+drive `StarButton` and market-tab ordering, and appear as the first list.
+Additional named lists use a multi-list API documented in
+`src/lib/api/watchlists.ts`, which the backend doesn't serve yet. Until it
+does (`GET /api/v1/watchlists` 404s), lists are saved in `localStorage`
+per wallet and are uploaded automatically the first time the server
+answers with no lists. Each row shows live spot, change since the session
+started (there's no server-side 24h change), ATM IV and a sparkline from
+the WebSocket feed's session buffer.
+
+## Testing
+
+Vitest with jsdom, React Testing Library, MSW for network tests and
+`fake-indexeddb`. Tests live next to the code as `*.test.ts(x)`. Strategy
+payoffs and finder rankings are snapshot-tested; `vitest run -u` updates
+snapshots after an intentional change.
 
 ## Known gaps
 

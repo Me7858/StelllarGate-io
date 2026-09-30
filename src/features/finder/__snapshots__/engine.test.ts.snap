@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`searchStrategies > ranks deterministically on a fixture chain 1`] = `
+[
+  "call-diagonal|s1c117.5@60,b1c115@90",
+  "bull-call-spread|b1c110@30,s1c115@30",
+  "bull-call-spread|b1c107.5@30,s1c115@30",
+  "bull-call-spread|b1c105@30,s1c115@30",
+  "call-diagonal|s1c115@60,b1c110@90",
+  "call-diagonal|s1c112.5@60,b1c110@90",
+  "call-diagonal|s1c115@30,b1c110@60",
+  "bull-call-spread|b1c107.5@30,s1c112.5@30",
+  "bull-call-spread|b1c105@30,s1c112.5@30",
+  "bull-call-spread|b1c102.5@30,s1c112.5@30",
+]
+`;
