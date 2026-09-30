@@ -3,12 +3,17 @@ import { NonceResponseSchema } from "./schemas";
 import { BFF_SESSION_ROUTE, CSRF_HEADER, type SessionInfo } from "../bff/constants";
 
 export interface NonceResponse {
-  nonce: string;
-  message: string;
+  nonce?: string;
+  message?: string;
 }
 
 export function requestNonce(walletAddress: string): Promise<NonceResponse> {
   return apiPost("/api/v1/auth/nonce", { wallet_address: walletAddress }, undefined, NonceResponseSchema);
+}
+
+export interface VerifyResponse {
+  token?: string;
+  wallet_address?: string;
 }
 
 async function sessionRequest(method: "GET" | "POST" | "DELETE", body?: unknown): Promise<SessionInfo> {
@@ -55,4 +60,6 @@ export function getSession(): Promise<SessionInfo> {
 /** Clears the session cookie (sign-out; applies to every tab). */
 export function deleteSession(): Promise<SessionInfo> {
   return sessionRequest("DELETE");
+}
+
 }

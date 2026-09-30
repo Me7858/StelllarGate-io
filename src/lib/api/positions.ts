@@ -58,8 +58,8 @@ export {
 } from "./close";
 
 export interface RollResult {
-  closed: Position;
-  opened: Position;
+  closed?: Position;
+  opened?: Position;
 }
 
 export function rollPosition(

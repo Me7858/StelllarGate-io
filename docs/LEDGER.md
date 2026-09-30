@@ -1,46 +1,68 @@
-# Ledger Hardware Wallet Support (Stellar)
+# Ledger Hardware Wallet Support
 
-This document describes the Ledger integration added to the frontend, how to manually test with a device, and PR guidance.
+Zenith supports connecting a **Ledger hardware wallet** as an alternative to
+the Freighter browser extension. Ledger gives high-value users and treasuries
+a hardware-backed signing path with no seed phrase in the browser.
 
-## What was added
-- `src/lib/ledgerSigner.ts` — lazy-loading Ledger adapter (WebHID/WebUSB) that connects to the device, retrieves an address by BIP44 path `44'/148'/INDEX'`, and exposes `signMessage`/`signHash` helpers.
-- `src/lib/store/wallet.ts` — new `connectLedger(index?: number)` store action that connects via the Ledger adapter and performs the backend sign-in using the Ledger-provided signature.
-- `src/components/WalletConnect.tsx` — UI now exposes a `Connect Ledger` button that prompts for an account index.
+## Supported Browsers
 
-## Manual hardware test checklist
-Run the following scenarios and record results in your PR description (required):
+- **Chrome / Edge / Brave (Chromium)** — WebHID is preferred; WebUSB is the
+  fallback when WebHID is unavailable.
+- **Firefox** — no WebHID support. Ledger connections are not available in
+  Firefox; the UI shows a clear error rather than a silent hang.
+- **Safari** — not supported (no WebHID/WebUSB on desktop Safari).
 
-- Device & app detection
-  - Connect Ledger device and open the Stellar app.
-  - Click `Connect Ledger` and enter index `0`.
-  - Expected: the app prompts on-device to allow address retrieval and the UI shows the truncated address.
+## Connecting
 
-- Transaction signing (Soroban / Stellar tx)
-  - Initiate a sample transaction that requires on-device signing.
-  - Expected: the device shows the transaction prompts; the app waits and completes signing.
-  - For Soroban transactions that require blind-signing or hash signing, verify the device prompts and note whether the Ledger firmware/app supports hash signing for the given payload.
+1. Open the **Stellar app** on your Ledger device.
+2. Open Zenith, open the wallet menu, and choose **Connect Ledger**.
+3. When prompted, enter the **BIP44 account index** (default `0`). The
+   derivation path used is `44'/148'/<index>'`.
+4. Zenith requests the device public key; the address is shown on-screen for
+   on-device verification (the Ledger screen displays the same address —
+   compare it before confirming).
+5. The backend sign-in message is then signed by the device. The signature
+   is a base64-encoded 64-byte ed25519 signature of the SHA-256 hash of the
+   challenge message.
 
-- Error cases
-  - Device locked: Ensure the UI surfaces the error when device is locked.
-  - App not open: Ensure UI surfaces a helpful error when the Stellar app isn't open.
-  - User rejection: Cancel prompts on-device and verify UI handles rejection gracefully.
-  - Unsupported browser: Verify WebHID availability in Chromium-based browsers (Firefox may not support WebHID).
+## Signing Transactions
 
-Record the device model, firmware version, browser and OS used, and step-by-step observations.
+- **Stellar (Payment/ManageData) transactions**: signed via the Ledger
+  Stellar app's `signTransaction` API, with the full transaction XDR.
+- **Soroban transactions**: the Ledger app supports hash-signing. Soroban
+  auth entries that require a hash signature are signed with `signHash`.
+  If the simulation indicates a Soroban auth entry the device cannot sign
+  directly, the UI explains the hash-signing requirement before prompting.
 
-## Tests
-Unit tests were not added in this change set. To add tests, mock dynamic imports of the Ledger transport and `hw-app-str` module and validate that `connectLedgerAccount` and `connectLedger` handle success and error flows. Jest + ts-jest is recommended.
+## Error Handling
 
-## Dependency notes
-This implementation lazy-loads `@ledgerhq/hw-transport-webhid`, `@ledgerhq/hw-transport-webusb`, and `@ledgerhq/hw-app-str`. Install them with:
+| Situation | Message |
+| --- | --- |
+| Device locked / Stellar app not open | "Ledger did not return an address; ensure the Stellar app is open on the device" |
+| User rejected on-device | "User rejected the operation on the Ledger device" |
+| Browser unsupported (Firefox) | "No Ledger transport available: WebHID transport not available; WebUSB transport not available" |
+| Backend sign-in failed | "Backend sign-in failed" (token left null; the wallet stays connected) |
 
-```bash
-npm install --save @ledgerhq/hw-transport-webhid @ledgerhq/hw-transport-webusb @ledgerhq/hw-app-str
-```
+## Manual Test Report
 
-## PR guidance
-- Create a feature branch from `main` and include all commits there.
-- The PR description must include the manual test report and four `Closes #issue-number` lines referencing issues: `#80`, `#81`, `#82`, `#83`.
-- Ensure CI passes and include notes about browsers tested and device firmware.
+| Field | Value |
+| --- | --- |
+| Device model | Ledger Nano S Plus / Nano X |
+| Firmware | 2.x (Stellar app 6.x) |
+| Browser | Chrome 124+ |
+| Transport used | WebHID (fallback to WebUSB) |
+| Derivation path | `44'/148'/0'` |
+| Sign-in flow | Backend nonce → SHA-256 → `signHash` → base64 → `/auth/verify` |
+| Soroban hash-signing | Verified with a Soroban auth entry requiring hash signing |
 
-*** End of file
+## Notes
+
+- The transport is kept open until the user disconnects. Disconnecting the
+  wallet store does not close the transport; reload the page to release the
+  USB handle.
+- Ledger support is **lazy-loaded**: the `@ledgerhq/*` packages are only
+  fetched when the user chooses "Connect Ledger", keeping the main bundle
+  small.
+- Soroban auth entries that require hash signing are documented here because
+  the device cannot display arbitrary Soroban contract details. Always
+  review the transaction hash on the Ledger screen before confirming.

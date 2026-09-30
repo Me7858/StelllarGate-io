@@ -35,6 +35,10 @@ interface WalletState {
   sessionExpired: boolean;
   /** Message signer for the connected wallet (Freighter or Ledger). */
   signMessage: ((message: string) => Promise<string>) | null;
+  /** "ledger" when the connected wallet is a Ledger hardware wallet, else
+   * "freighter" (or null when disconnected). Used to gate Soroban tx signing
+   * and to show device-specific guidance. */
+  signerKind: "freighter" | "ledger" | null;
   connect: () => Promise<void>;
   connectLedger: (index?: number) => Promise<void>;
   disconnect: () => void;
@@ -64,7 +68,10 @@ async function signInWithBackend(
   // Throws ChallengeValidationFailure with a precise error code on any violation.
   const challenge = parseAndValidateChallenge(message, address);
 
-  // NOTE: Freighter's signBlob returns base64-encoded bytes.
+  // NOTE: Freighter's signBlob returns base64-encoded bytes. The Ledger
+  // adapter returns a base64 signature of the SHA-256 hash of the message,
+  // which the backend accepts in place of Freighter's signBlob output (both
+  // are 64-byte ed25519 signatures).
   const signature = await signMessage(message);
   const info = await createSession({ walletAddress: address, message, signature });
   if (!info.authenticated || info.wallet_address !== address) throw new Error('Backend sign-in failed');
@@ -91,6 +98,7 @@ export const useWalletStore = create<WalletState>()(
       sessionExpired: false,
       lastChallenge: null,
       signMessage: null,
+      signerKind: null,
 
       connect: async () => {
         set({ status: 'connecting', error: null });
@@ -102,7 +110,7 @@ export const useWalletStore = create<WalletState>()(
           }
           const address = await freighterApi.requestAccess();
           const details = await freighterApi.getNetworkDetails().catch(() => null /* deliberate: network label is optional */);
-          set({ status: 'connected', address, network: details?.network ?? null, error: null, signMessage: freighterSignMessage });
+          set({ status: 'connected', address, network: details?.network ?? null, error: null, signMessage: freighterSignMessage, signerKind: 'freighter' });
 
           try {
             const { info, challenge } = await signInWithBackend(address);
@@ -122,7 +130,7 @@ export const useWalletStore = create<WalletState>()(
           // code into the main bundle unless the user requests it.
           const { connectLedgerAccount } = await import('../ledgerSigner');
           const ledger = await connectLedgerAccount(index);
-          set({ status: 'connected', address: ledger.address, network: null, error: null, signMessage: ledger.signMessage });
+          set({ status: 'connected', address: ledger.address, network: null, error: null, signMessage: ledger.signMessage, signerKind: 'ledger' });
 
           try {
             const { info, challenge } = await signInWithBackend(ledger.address, ledger.signMessage);
@@ -137,7 +145,7 @@ export const useWalletStore = create<WalletState>()(
       },
 
       disconnect: () => {
-        set({ status: 'idle', address: null, network: null, error: null, sessionExpired: false, signMessage: null, ...signedOut });
+        set({ status: 'idle', address: null, network: null, error: null, sessionExpired: false, signMessage: null, signerKind: null, ...signedOut });
         // Clearing the cookie signs out every tab; tabs/session.ts updates their UI.
         void deleteSession().catch(() => undefined /* deliberate: local state is already cleared */);
       },
@@ -211,6 +219,19 @@ export const useWalletStore = create<WalletState>()(
     }),
     {
       name: WALLET_STORAGE_KEY,
+      // Only the (public) address is persisted — no token, no session state.
+      partialize: (s) => ({ address: s.address }),
+      // v0/v1 persisted { address, token, tokenExpiresAt } — drop the token (#118).
+      version: 2,
+      migrate: (persisted) => {
+        const old = (persisted ?? {}) as { address?: string | null };
+        return { address: old.address ?? null } as unknown as WalletState;
+      },
+      skipHydration: true,
+    }
+  )
+);
+WALLET_STORAGE_KEY,
       // Only the (public) address is persisted — no token, no session state.
       partialize: (s) => ({ address: s.address }),
       // v0/v1 persisted { address, token, tokenExpiresAt } — drop the token (#118).

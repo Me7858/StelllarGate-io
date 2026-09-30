@@ -1,6 +1,8 @@
-// Lightweight Ledger signer adapter — lazy-loads transport and app
+// Lightweight Ledger signer adapter — lazy-loads transport and app.
 // Uses WebHID where available, falls back to WebUSB. Exposes a minimal
 // interface for connecting, getting an address, and signing blobs/hashes.
+// All ledger dependencies are imported dynamically so the adapter is
+// only loaded when the user explicitly chooses "Connect Ledger".
 
 type LedgerConnectResult = {
   address: string;
@@ -11,7 +13,7 @@ type LedgerConnectResult = {
 };
 
 export async function connectLedgerAccount(accountIndex = 0, preferWebHID = true): Promise<LedgerConnectResult> {
-  // Dynamic import so consumer only pulls ledger libs when requested.
+  // Dynamic import so consumers only pull ledger libs when requested.
   let Transport: any = null;
   let Str: any = null;
 
@@ -46,17 +48,18 @@ export async function connectLedgerAccount(accountIndex = 0, preferWebHID = true
     throw new Error("Ledger Stellar app library could not be loaded: " + String(err));
   }
 
-  // Create transport and app instance
-  const transport = await Transport.create();
+  // Create transport and app instance. `request()` prompts the user to
+  // connect a device; on Firefox (no WebHID) this throws a clear error.
+  const transport = await Transport.request();
   const app = new Str(transport);
 
   // Standard SLIP-0010/BIP44 Stellar path: 44'/148'/accountIndex'
   const path = `44'/148'/${accountIndex}'`;
 
-  // getAddress is the common method exposed by hw-app-str
-  // response shape may vary between versions; defensively handle it.
+  // getAddress is the common method exposed by hw-app-str.
+  // Response shape may vary between versions; defensively handle it.
   const addrResp = await app.getAddress(path, { verify: true }).catch(async (e: any) => {
-    // Some versions expect different arg signature — try without options
+    // Some versions expect different arg signature — try without options.
     return app.getAddress(path).catch((err2: any) => { throw err2; });
   });
 
@@ -69,13 +72,11 @@ export async function connectLedgerAccount(accountIndex = 0, preferWebHID = true
   }
 
   // signMessage: ledger may not have a generic "sign message" helper for
-  // arbitrary blobs, so we use signHash where available. Caller should
-  // provide the backend with base64 signature as expected.
+  // arbitrary blobs, so we hash the message (sha256) and ask the ledger to
+  // sign the hash. The caller (backend verify) expects a base64 signature.
   async function signMessage(message: string) {
     const encoder = new TextEncoder();
     const bytes = encoder.encode(message);
-    // Hash the message (sha256) and ask ledger to sign the hash
-    // Use a runtime SHA-256 implementation (built-in crypto API)
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     const hashHex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
     return signHash(hashHex);
@@ -90,11 +91,10 @@ export async function connectLedgerAccount(accountIndex = 0, preferWebHID = true
       // sig may come back as { signature: '...' } or as raw hex string
       if (sig?.signature) return sig.signature;
       if (typeof sig === "string") return sig;
-      // try hex buffer
       if (sig?.sigHex) return sig.sigHex;
     }
 
-    // Fallback to signTransaction if provided; caller must produce tx XDR
+    // Fallback to signTransaction if provided; caller must produce tx XDR.
     if (typeof app.signTransaction === "function") {
       const sig = await app.signTransaction(path, hex);
       return sig?.signature || sig;
