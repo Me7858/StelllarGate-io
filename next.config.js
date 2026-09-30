@@ -11,6 +11,17 @@ const nextConfig = {
   // Don't advertise the framework.
   poweredByHeader: false,
 
+  // Lint and type-checking run as dedicated CI jobs (lint + typecheck in
+  // ci.yml) so we disable them during `next build` to avoid double-running
+  // them — and to prevent ESLint from blocking the build artifact from being
+  // produced when lint errors exist (the lint job is the gate, not the build).
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+
   // Next.js 15: fetch is no longer cached by default (changed from force-cache
   // to no-store). The app uses the client-side fetch wrapper in
   // src/lib/api/client.ts which always runs in the browser, so this doesn't
