@@ -1,0 +1,79 @@
+import { BlockMath, InlineMath } from "../../../components/docs/Math";
+
+export const metadata = {
+  title: "Fees & Economics | Zenith Protocol Docs",
+  description: "Transparent breakdown of Zenith protocol trading fees, writer incentives, Stellar Soroban execution gas costs, and treasury sustainability economics.",
+};
+
+# Fees & Economics
+
+Zenith is designed to offer the lowest cost derivatives trading in decentralized finance by leveraging Stellar's high-throughput architecture.
+
+All fees are transparent, fixed, and enforced deterministically by the smart contract protocol.
+
+---
+
+<h2 id="fee-breakdown">Fee Structure</h2>
+
+The protocol fee structure consists of two components:
+1. **Protocol Trading Fee:** A fractional percentage fee levied on the option premium at trade execution.
+2. **Network Gas Fee:** The sub-cent Stellar network fee required to record Soroban contract invocations.
+
+There are **zero fees** for:
+* Holding positions
+* Depositing or withdrawing collateral
+* Canceling unfilled limit orders
+* Reclaiming collateral after expiration
+
+---
+
+<h2 id="trading-fees">Trading Fees</h2>
+
+Trading fees are assessed as a percentage of the total option premium traded:
+
+| Action | Fee Rate | Fee Cap | Beneficiary |
+| :--- | :--- | :--- | :--- |
+| **Option Purchase (Taker)** | 0.30% of Premium | Max 12.5% of Option Intrinsic | Protocol Treasury / Liquidity Reserve |
+| **Option Sale / Write (Maker)** | 0.15% of Premium | Max 6.0% of Option Intrinsic | Protocol Treasury / Liquidity Reserve |
+| **Position Close (Before Expiry)** | 0.20% of Premium | Standard Cap | Protocol Treasury |
+| **Exercise at Expiration** | 0.10% of Intrinsic Payout | No Cap | Keeper / Settlement Pool |
+
+### Fee Capping Formula
+To protect traders opening deep out-of-the-money (low premium) or deep in-the-money options, fees are dynamically capped:
+
+<BlockMath math="\text{Fee}_{\text{trade}} = \min\Big(\text{Rate} \cdot \text{Premium} \cdot N, \; 0.125 \cdot S \cdot N\Big)" />
+
+This ensures that trading low-priced or speculative options remains economically viable without excessive transaction friction.
+
+---
+
+<h2 id="soroban-gas">Stellar Network Gas Costs</h2>
+
+Transactions on Stellar Soroban consume resources measured in CPU instructions and memory read/write bytes:
+
+* **Stellar Base Fee:** Typically 100 stroops (0.00001 XLM), which equals less than **$0.000002 USD** per transaction.
+* **Smart Contract Execution Fee:** An average Soroban options trade costs between **0.005 and 0.02 XLM** (approximately **$0.001 to $0.003 USD**).
+* **Predictable Inclusion:** Unlike Ethereum or EVM L2s where gas spikes by 10x–50x during volatility surges, Stellar's fee market remains remarkably flat and predictable.
+
+---
+
+<h2 id="treasury-allocation">Protocol Treasury & Economics</h2>
+
+Protocol trading fees collected in USDC and XLM are directed to the Zenith Protocol Treasury, governed by transparent on-chain rules:
+
+```text
+┌────────────────────────────────────────────────────────┐
+│               100% Protocol Trading Fees                │
+└───────────────────────────┬────────────────────────────┘
+                            │
+         ┌──────────────────┼──────────────────┐
+         │ 50%              │ 30%              │ 20%
+┌────────▼────────┐ ┌───────▼────────┐ ┌───────▼────────┐
+│ Insurance &     │ │ Liquidity      │ │ Protocol       │
+│ Safety Reserve  │ │ Incentives     │ │ Development    │
+└─────────────────┘ └────────────────┘ └────────────────┘
+```
+
+1. **50% — Insurance & Safety Reserve:** Funds an on-chain reserve backing protocol security and extraordinary volatility buffers.
+2. **30% — Liquidity Incentives:** Reallocated as trading rebates and volume rewards to active options writers and market makers.
+3. **20% — Protocol Development & Audits:** Supports continuous smart contract audits, bug bounties, and infrastructure maintenance.

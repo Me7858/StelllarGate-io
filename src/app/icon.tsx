@@ -1,20 +1,17 @@
 import { ImageResponse } from "next/og";
+import { envIconDataUri } from "../lib/env/icon";
+import { DEFAULT_MODE } from "../lib/env/networks";
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
+// Static favicon for the default (paper) mode. EnvironmentProvider swaps
+// in the matching mode's icon client-side once the persisted mode is known.
 export default function Icon() {
   return new ImageResponse(
     (
-      <div style={{
-        width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#14130F",
-      }}>
-        <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
-          <polygon points="10,2 18,18 2,18" stroke="#B59665" strokeWidth="1.5" fill="rgba(181,150,101,0.14)" strokeLinejoin="round" />
-          <polygon points="10,7 14.5,16 5.5,16" fill="#B59665" opacity="0.5" />
-        </svg>
-      </div>
+      // eslint-disable-next-line @next/next/no-img-element
+      <img width={32} height={32} src={envIconDataUri(DEFAULT_MODE)} alt="" />
     ),
     { ...size }
   );

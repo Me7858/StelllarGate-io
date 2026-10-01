@@ -5,6 +5,8 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
 
 # next.js
 /.next/
@@ -12,6 +14,10 @@
 
 # production
 /build
+
+# storybook
+/storybook-static
+storybook-error.log
 
 # misc
 .DS_Store
@@ -32,3 +38,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test output
+/test-results/
+/playwright-report/
+/blob-report/
+/lhci-report/
+/.lighthouseci/

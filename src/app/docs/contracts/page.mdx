@@ -1,0 +1,136 @@
+export const metadata = {
+  title: "Smart Contracts & Architecture | Zenith Protocol Docs",
+  description: "Soroban Rust smart contract architecture, instance vs persistent state storage, SEP-41 token allowances, on-chain interfaces, and protocol security invariants.",
+};
+
+# Smart Contracts & Architecture
+
+Zenith's core protocol is implemented in Rust and compiled to WebAssembly (Wasm) for execution within the Stellar Soroban virtual machine.
+
+This architecture leverages Soroban's modern capability-based security model, native token standards, and deterministic storage system.
+
+---
+
+<h2 id="contract-overview">Soroban Contract Architecture</h2>
+
+The on-chain protocol consists of three modular smart contracts:
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                   Zenith Factory Contract              │
+│    • Manages supported market underlying assets        │
+│    • Spawns expiration series series_id                │
+└───────────────────────────┬────────────────────────────┘
+                            │
+         ┌──────────────────┴──────────────────┐
+         │                                     │
+┌────────▼──────────────┐             ┌────────▼──────────────┐
+│  Options Pool Contract│             │  Settlement Escrow    │
+│  • Orders & Positions │             │  • Locks Collateral   │
+│  • Intrinsic math     │             │  • Interacts Reflector│
+│  • Position lifecycle │             │  • Disburses Payouts  │
+└───────────────────────┘             └───────────────────────┘
+```
+
+Contracts communicate synchronously via Soroban cross-contract calls, ensuring atomic state transitions without intermediate failure states.
+
+---
+
+<h2 id="state-storage">Instance & Persistent Storage</h2>
+
+Soroban introduces two primary state storage tiers:
+1. **Instance Storage:** Used for global protocol configurations, oracle addresses, supported token registries, and administrative parameters.
+2. **Persistent Storage:** Used for individual user positions, escrow balances, and trade records.
+
+To guarantee position availability across lengthy expiration horizons (up to 180 days), the contract automatically invokes `env.storage().persistent().extend_ttl()` during every interaction, extending ledger lifespan well past the expiration and settlement window.
+
+---
+
+<h2 id="token-allowances">SEP-41 Token Allowances</h2>
+
+Token transfers in Soroban follow the **SEP-41 Token Interface**, Stellar's standard for smart contract asset handling:
+
+* **Authorization via Signers:** When a trader opens a position or writes collateral, the client initiates a token `approve` invocation granting the Zenith contract permission to debit the specified amount:
+```rust
+token_client.approve(
+    &user_address,
+    &contract_address,
+    &collateral_amount,
+    &expiration_ledger,
+);
+```
+* **No Direct Private Key Access:** Contracts can only transfer amounts explicitly authorized by the user's signature.
+* **Atomic Transfer From:** The options pool invokes `transfer_from` directly inside the position creation transaction, guaranteeing that position creation and collateral deposit occur in the same ledger block.
+
+---
+
+<h2 id="contract-interfaces">Key Contract Functions</h2>
+
+The public interface for Zenith Soroban contracts includes the following functions:
+
+### 1. `open_position`
+```rust
+pub fn open_position(
+    env: Env,
+    caller: Address,
+    market: Symbol,
+    strike: i128,
+    expiry_timestamp: u64,
+    option_type: Symbol, // "call" or "put"
+    action: Symbol,      // "buy" or "sell"
+    contracts: i128,
+) -> u64;
+```
+Validates parameters, transfers buyer premium or seller collateral into escrow, and records a new immutable `Position` struct in persistent storage.
+
+### 2. `close_position`
+```rust
+pub fn close_position(
+    env: Env,
+    caller: Address,
+    position_id: u64,
+) -> bool;
+```
+Permits an option holder or writer to close out an active position prior to expiry at prevailing market rates, returning remaining collateral to the writer.
+
+### 3. `settle_expiry`
+```rust
+pub fn settle_expiry(
+    env: Env,
+    series_id: u64,
+    oracle_price_data: PriceFeedData,
+) -> bool;
+```
+Consumes signed Reflector oracle proof, fixes terminal settlement price $S_T$, and opens the 24-hour exercise window.
+
+### 4. `exercise_position`
+```rust
+pub fn exercise_position(
+    env: Env,
+    caller: Address,
+    position_id: u64,
+) -> i128;
+```
+Calculates intrinsic payout $\max(0, S_T - K)$ or $\max(0, K - S_T)$, disburses funds to the position holder, and marks the position as exercised.
+
+### 5. `reclaim_collateral`
+```rust
+pub fn reclaim_collateral(
+    env: Env,
+    caller: Address,
+    position_id: u64,
+) -> i128;
+```
+Releases remaining escrowed collateral back to the writer following the expiration window.
+
+---
+
+<h2 id="security-audits">Security & Invariants</h2>
+
+The Zenith contract suite enforces strict mathematical invariants at runtime:
+
+1. **Collateral Invariance:** Escrow balance must always satisfy:
+   $$\text{Contract Balance} \ge \sum \text{Open Call Obligations} + \sum \text{Open Put Obligations}$$
+2. **Double-Spend Prevention:** Each position ID is a strictly monotonically increasing 64-bit integer; position state changes from `Open` to `Exercised` or `Closed` irreversibly.
+3. **No Reentrancy:** Soroban's native execution environment prevents reentrant external calls by design, eliminating classic EVM reentrancy vulnerabilities.
+4. **Checked Arithmetic:** All financial calculations use safe math (`checked_add`, `checked_mul`, `checked_div`) to prevent integer underflow or overflow exploits.

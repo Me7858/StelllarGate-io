@@ -1,0 +1,82 @@
+export const metadata = {
+  title: "Options Basics | Zenith Protocol Docs",
+  description: "Learn the foundational concepts of options trading: call vs put options, buyer rights vs writer obligations, moneyness, and European exercise mechanics.",
+};
+
+# Options Basics
+
+Options are derivative contracts giving the holder the right—but not the obligation—to buy or sell an underlying asset at a specified price before or at a set date.
+
+Understanding the relationship between spot price, strike price, time to expiration, and volatility is essential for trading effectively on Zenith.
+
+---
+
+<h2 id="core-concepts">Core Concepts: Calls & Puts</h2>
+
+There are two primary flavors of options contracts:
+
+### 1. Call Options (Right to Buy)
+* A **Call** gives the buyer the right to purchase the underlying asset at the **Strike Price ($K$)**.
+* **Buyer Perspective:** Profitable when the spot price ($S$) rises above the strike price plus the premium paid. Maximum loss is capped at the premium paid.
+* **Writer Perspective:** Obligated to sell the underlying asset at the strike price if exercised. Writer collects upfront premium in exchange for upside cap.
+
+### 2. Put Options (Right to Sell)
+* A **Put** gives the buyer the right to sell the underlying asset at the **Strike Price ($K$)**.
+* **Buyer Perspective:** Profitable when the spot price falls below the strike price minus the premium paid. Provides downside hedging.
+* **Writer Perspective:** Obligated to purchase the underlying asset at the strike price if exercised. Writer collects upfront premium.
+
+---
+
+<h2 id="option-buyers-vs-writers">Buyers vs. Writers</h2>
+
+In every options trade on Zenith, two parties enter an immutable contract:
+
+| Role | Right or Obligation | Risk Profile | Collateral Required |
+| :--- | :--- | :--- | :--- |
+| **Buyer (Long)** | Has the **right** to exercise if option finishes in-the-money. | Capped at initial premium paid; profit potential can be unlimited (calls). | Zero collateral (pays cash premium up front). |
+| **Writer (Short)** | Has the **obligation** to settle payout if buyer exercises. | Limited to premium received; downside risk if market moves against position. | 100% spot token for calls; 110% cash strike value for puts. |
+
+---
+
+<h2 id="moneyness">Moneyness: ITM, ATM, OTM</h2>
+
+Moneyness describes the relationship between the current spot price ($S$) of the underlying asset and the strike price ($K$) of the option contract:
+
+### In-the-Money (ITM)
+* **Call:** Spot price is higher than strike price ($S > K$). The option has positive intrinsic value: $\max(0, S - K)$.
+* **Put:** Spot price is lower than strike price ($S < K$). Intrinsic value: $\max(0, K - S)$.
+
+### At-the-Money (ATM)
+* The spot price is equal or virtually identical to the strike price ($S \approx K$). The option value is driven purely by time value and volatility.
+
+### Out-of-the-Money (OTM)
+* **Call:** Spot price is below the strike price ($S < K$). Intrinsic value is zero.
+* **Put:** Spot price is above the strike price ($S > K$). Intrinsic value is zero.
+
+> **Tip:** On Zenith's options chain, ITM rows are visually highlighted with muted emerald (`--call-dim`) for calls and muted rose (`--put-dim`) for puts, while ATM strikes are framed with amber badges.
+
+---
+
+<h2 id="european-style">European Exercise on Zenith</h2>
+
+Options can be characterized by their exercise timing rules:
+* **American Options:** May be exercised by the holder at any time prior to and including expiration day.
+* **European Options:** May only be exercised at the precise expiration time.
+
+Zenith strictly implements **European-style options**. This provides key advantages for decentralized finance:
+1. **Predictable Collateral Lockups:** Writers know with mathematical certainty that their collateral cannot be called away before expiration day, avoiding sudden margin calls.
+2. **Deterministic Settlement:** Exercise payouts are evaluated against the oracle price at the exact moment of expiration, eliminating front-running and early exercise arbitrage.
+3. **Optimized Gas Efficiency:** Smart contracts only perform settlement calculations during the 24-hour expiration settlement window.
+
+---
+
+<h2 id="available-markets">Supported Underlyings</h2>
+
+Zenith currently supports four core cryptocurrency markets on Stellar Soroban:
+
+* **XLM (Stellar Lumens):** Native base currency with high liquidity and rapid transaction finality.
+* **BTC (Bitcoin):** Wrapped institutional benchmark collateral.
+* **ETH (Ethereum):** Leading smart contract platform benchmark.
+* **SOL (Solana):** High-beta asset with distinct volatility dynamics.
+
+Each market features standard expiration tenors: **7 days, 14 days, 30 days, 60 days, 90 days, and 180 days**.

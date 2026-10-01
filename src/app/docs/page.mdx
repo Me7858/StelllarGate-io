@@ -1,0 +1,78 @@
+export const metadata = {
+  title: "Getting Started | Zenith Protocol Docs",
+  description: "Introduction to Zenith Protocol on Stellar Soroban, core features, architecture overview, and quickstart guide for traders and liquidity writers.",
+};
+
+# Getting Started with Zenith
+
+Welcome to the Zenith documentation. Zenith is a decentralized, non-custodial options protocol built on the Stellar network using Soroban smart contracts.
+
+The protocol provides European-style options on crypto assets—including XLM, BTC, ETH, and SOL—with automated Black-Scholes pricing, realistic volatility smile modeling, and fully transparent collateral guarantees.
+
+---
+
+<h2 id="what-is-zenith">What is Zenith?</h2>
+
+Zenith enables peer-to-peer options trading on Stellar with deterministic settlement and minimal gas overhead. Unlike traditional perpetual contracts or synthetic derivatives, Zenith options are fully collateralized European contracts settled on-chain.
+
+* **Non-Custodial Architecture:** Collateral is locked directly in Soroban smart contracts. No intermediary, exchange operator, or admin key can seize or rehypothecate locked assets.
+* **Deterministic Settlement:** Options settle against verified decentralized oracle feeds from Reflector, preventing manipulation and artificial liquidation cascades.
+* **Capital Efficiency:** Collateral rules are mathematically enforced (100% spot for calls, 110% cash for puts), eliminating insolvency risk while maximizing transparency.
+
+---
+
+<h2 id="key-features">Key Features</h2>
+
+Zenith combines institutional-grade derivatives financial engineering with Stellar's ultra-low latency and predictable fees:
+
+1. **Continuous Options Chain:** Real-time pricing across multiple strike prices ($K$) and expiration dates ($T$) from 7 to 180 days.
+2. **Embedded Volatility Smile:** A continuous quadratic smile model that accounts for crypto-native put skew and tail risk steepening.
+3. **Interactive Calculators:** Documentation and terminal interfaces reuse identical production math libraries, allowing traders to simulate prices, collateral, and payoff curves before signing a transaction.
+4. **Portfolio Stress-Testing:** Real-time Greek aggregation (Delta, Gamma, Theta, Vega) across multi-leg positions and custom volatility shock scenarios.
+
+---
+
+<h2 id="protocol-architecture">Protocol Architecture</h2>
+
+The Zenith decentralized application consists of three synchronized layers:
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                   Zenith Web Client                    │
+│   (Next.js App Router + TypeScript + KaTeX Math)       │
+└──────────────┬───────────────────────────┬─────────────┘
+               │                           │
+        HTTP / WebSocket             Freighter API
+               │                           │
+┌──────────────▼─────────────┐   ┌─────────▼─────────────┐
+│    Zenith Rust Backend     │   │   Stellar Soroban     │
+│  - Real-time Market Feeds  │   │   Smart Contracts     │
+│  - WebSocket Price Stream  │   │  - SEP-41 Tokens      │
+│  - Order Execution Engine  │   │  - Collateral Escrow  │
+│  - Reflector Oracle Feed   │   │  - Exercise & Payout  │
+└────────────────────────────┘   └───────────────────────┘
+```
+
+Traders connect their Stellar wallet (such as Freighter) to sign Soroban invocations directly against the contract, while the backend provides low-latency streaming quotes and market depth.
+
+---
+
+<h2 id="quickstart">Quickstart Guide</h2>
+
+Follow these steps to make your first option trade or write a covered contract:
+
+### Step 1: Connect Your Wallet
+Zenith uses Stellar's native wallet standard. Install the [Freighter Wallet](https://www.freighter.app/) browser extension and switch your network to **Stellar Testnet** for test trading.
+
+### Step 2: Acquire Testnet Assets
+Fund your testnet account using the Stellar Friendbot to receive test XLM and mint test USDC.
+
+### Step 3: Browse the Options Chain
+Navigate to the [Options Chain](/options) tab. Select your desired underlying asset (e.g., XLM) and expiry date. The chain displays:
+* Strikes with At-The-Money (ATM), In-The-Money (ITM), and Out-Of-The-Money (OTM) color indicators
+* Live bid/ask implied volatility ($\sigma$)
+* The Greeks: $\Delta$ (Delta), $\Gamma$ (Gamma), $\Theta$ (Theta), $V$ (Vega)
+* Historical volume and open interest
+
+### Step 4: Open a Position
+Click on any premium cell to launch the order drawer. Choose your contract volume, review the collateral requirements and breakeven point, and approve the transaction in Freighter.

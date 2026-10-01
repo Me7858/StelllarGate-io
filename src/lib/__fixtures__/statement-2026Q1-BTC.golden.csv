@@ -1,0 +1,3 @@
+Position ID,Event,Opened (UTC),Closed (UTC),Underlying,Type,Side,Strike,Contracts,Premium Paid,Premium Received,Fees,Cost Basis,Proceeds,Realized P&L,Holding Days,Term,Linked Position
+a1b2c3d4-0002-4000-8000-000000000002,roll,2026-01-20T08:00:00Z,2026-02-20T10:00:00Z,BTC,short,put,60000.00,0.50,900.125,600.25,0.00,900.125,600.25,-299.875,31,short-term,a1b2c3d4-0003-4000-8000-000000000003
+a1b2c3d4-0003-4000-8000-000000000003,close,2026-02-20T10:00:00Z,2026-03-15T16:45:00Z,BTC,short,put,57000.00,0.50,450.05,1050.00,0.00,450.05,1050.00,599.95,23,short-term,a1b2c3d4-0002-4000-8000-000000000002

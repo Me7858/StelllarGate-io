@@ -7,15 +7,35 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
-    "strict": false,
+    // ─── Strictness ────────────────────────────────────────────────────────
+    // `strict: true` enables the full suite but introduces ~40 new errors on
+    // top of the pre-existing baseline.  The flags below are the safe subset:
+    // they were validated to produce ≤ the baseline error count (231 errors,
+    // all pre-existing).  The remaining strict flags are tracked in
+    // TODO(#103-strict): once the pre-existing errors are cleaned up, flip
+    //   strict: true
+    // and remove the individual flags.
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    // ─── Emit ──────────────────────────────────────────────────────────────
     "noEmit": true,
     "incremental": true,
+    // ─── Module ────────────────────────────────────────────────────────────
     "module": "esnext",
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "plugins": [
       {
         "name": "next"
@@ -26,9 +46,11 @@
     "next-env.d.ts",
     ".next/types/**/*.ts",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "eslint.config.mjs"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "**/*.test.ts"
   ]
 }

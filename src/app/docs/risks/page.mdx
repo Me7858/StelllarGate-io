@@ -1,0 +1,90 @@
+import { BlockMath, InlineMath } from "../../../components/docs/Math";
+
+export const metadata = {
+  title: "Risk Disclosures & Edge Cases | Zenith Protocol Docs",
+  description: "Comprehensive risk disclosures: short gamma risk for writers, theta decay for buyers, oracle deviation edge cases, smart contract invariants, and portfolio stress testing.",
+};
+
+# Risk Disclosures & Edge Cases
+
+Options trading involves significant financial risk. Derivatives contracts are leveraged instruments where market movements can lead to complete loss of invested capital.
+
+Before trading on Zenith, participants must understand the risk mechanics governing option buyers, option writers, and decentralized infrastructure.
+
+---
+
+<h2 id="writer-risk">Option Writer Risk (Short Gamma)</h2>
+
+Selling options (writing contracts) allows market participants to earn upfront yield by collecting premiums. However, writers assume asymmetric risk profiles:
+
+### 1. Covered Call Risk
+* **Opportunity Cost:** If the underlying asset surges significantly above the strike price $K$, the writer's upside is strictly capped at $K + \text{Premium}$. The writer forfeits all further upside appreciation.
+* **Underlying Depreciation:** The writer continues to bear 100% downside market risk of holding the underlying asset. The premium received provides only a modest buffer against market crashes.
+
+### 2. Cash-Secured Put Risk
+* **Crash Risk:** If the underlying asset drops to zero, the writer is obligated to purchase the asset at the agreed strike price $K$, incurring substantial capital loss:
+<BlockMath math="\text{Max Loss}_{\text{short put}} = (K - P_0) \cdot N" />
+* **Capital Lockup:** The writer's USDC collateral is locked in the Soroban contract until position closure or expiration, preventing re-allocation to alternative trading opportunities.
+
+---
+
+<h2 id="buyer-risk">Option Buyer Risk (Premium Decay)</h2>
+
+Option buyers face total capital loss if contracts fail to reach in-the-money status before expiration:
+
+* **Theta ($\Theta$) Time Decay:** An option's time value decays exponentially as expiration approaches. For short-dated options ($< 14$ days), theta decay accelerates rapidly:
+<BlockMath math="\Theta \propto -\frac{S \cdot \sigma}{2\sqrt{t}}" />
+* **Complete Loss of Premium:** If an option expires out-of-the-money by even $0.0001, 100% of the premium paid is lost. Unlike spot assets, options have an immutable expiration deadline.
+* **Volatility Crush:** If implied volatility drops sharply after entering a position (e.g., following a major protocol announcement or CPI release), option values decline even if the spot price moves favorably.
+
+---
+
+<h2 id="oracle-risk">Oracle Latency & Deviation</h2>
+
+Zenith uses the Reflector decentralized oracle for settlement. Traders should be mindful of key oracle constraints:
+
+* **Update Cadence:** Oracle price updates on Stellar occur on ledger boundaries (every 4–5 seconds). Rapid spot market swings on centralized exchanges during intense volatility may create short-term price deviations.
+* **Staleness Circuit Breakers:** If the oracle fails to produce an updated price within 180 seconds, contract settlement enters a temporary safety pause until fresh multi-source signatures are verified.
+* **Median Outlier Rejection:** Extreme single-exchange flash crashes are filtered out by Reflector's multi-source volume-weighted median calculation.
+
+---
+
+<h2 id="smart-contract-risk">Smart Contract & Soroban Risks</h2>
+
+While Zenith contracts are written in memory-safe Rust for the Soroban WebAssembly runtime, all smart contracts carry technical risks:
+
+* **Runtime Upgrades:** Stellar network protocol upgrades (e.g., Soroban protocol version migrations) may cause brief network coordination delays.
+* **Storage Rent Invariance:** Soroban introduces state expiration and storage rent. Zenith contracts automatically prepay state storage rent to ensure all option records remain permanently active through settlement.
+* **Transaction Ordering:** On-chain transactions are subject to Stellar validator block proposal and consensus order.
+
+---
+
+<h2 id="portfolio-stress-testing">Portfolio Stress Testing</h2>
+
+To help traders monitor multi-leg portfolio exposure, Zenith implements real-time scenario stress testing in `src/lib/risk.ts`.
+
+The stress-test engine simulates instantaneous market shocks across:
+1. **Spot Price Shocks:** Spot shifts from $-30\%$ to $+30\%$ in $5\%$ increments.
+2. **Implied Volatility Shocks:** Absolute volatility shifts ($\pm 10\%, \pm 20\%$).
+3. **Time Progression:** Advancing time by $1, 7,$ or $14$ days to isolate theta decay.
+
+```typescript
+// From src/lib/risk.ts lines 42-78
+export function stressTestPortfolio(
+  positions: Position[],
+  spot: number,
+  baseVol: number,
+  spotShocks = [-0.20, -0.10, -0.05, 0, 0.05, 0.10, 0.20]
+): StressTestResult[] {
+  return spotShocks.map(shock => {
+    const bumpedSpot = spot * (1 + shock);
+    const pnl = positions.reduce((acc, pos) => {
+      // Re-evaluate payoff across stressed spot conditions
+      return acc + calculatePositionStressedPnl(pos, bumpedSpot, baseVol);
+    }, 0);
+    return { shockPct: shock * 100, bumpedSpot, pnl };
+  });
+}
+```
+
+Traders can access this directly in the [Portfolio Risk Panel](/portfolio) to ensure their positions remain within safe risk tolerances.

@@ -1,0 +1,208 @@
+# .github/workflows/bundle.yml
+#
+# Bundle size check — runs on PRs targeting main.
+#
+# What it does:
+#   1. Measures bundle budgets on the PR branch with `size-limit`.
+#   2. If the PR has a base-sha available, also measures the base branch so the
+#      comment can show a diff (added/removed kB per chunk).
+#   3. Posts (or updates) a PR comment with the full budget table.
+#   4. Fails the job if any budget is exceeded.
+#
+# Notes on fork PRs:
+#   Fork PRs cannot access repo secrets and cannot write pull-request comments
+#   via the default GITHUB_TOKEN.  The size check (step 1) still runs and will
+#   fail the job if a budget is exceeded; the comment step is skipped gracefully
+#   via the `if` condition below.
+#
+# See CONTRIBUTING.md §Bundle budgets for guidance on adjusting limits.
+
+name: Bundle Size
+
+on:
+  pull_request:
+    branches: [main]
+    # Only re-run when files that affect bundle size change.
+    paths:
+      - 'src/**'
+      - 'package*.json'
+      - 'next.config.js'
+      - '.github/workflows/bundle.yml'
+
+concurrency:
+  group: bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write   # needed to post / update the size comment
+
+env:
+  NEXT_PUBLIC_API_URL: http://localhost:8081
+  NEXT_PUBLIC_STELLAR_NETWORK: testnet
+  NEXT_PUBLIC_STELLAR_TESTNET_CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
+  # Tell size-limit to emit JSON so we can post a formatted table.
+  CI: true
+
+jobs:
+  bundle:
+    name: Bundle Budget Check
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Setup ──────────────────────────────────────────────────────────────
+      - uses: ./.github/actions/setup
+
+      # ── Restore (or save) the Next.js incremental build cache ─────────────
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-bundle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            nextjs-bundle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            nextjs-bundle-${{ runner.os }}-
+
+      # ── Build the PR branch ────────────────────────────────────────────────
+      - name: Build (PR branch)
+        run: npm run build
+
+      # ── Run size-limit on the PR branch ───────────────────────────────────
+      # --json emits machine-readable output; we capture it for the comment.
+      # The exit code is non-zero when a budget is exceeded.
+      - name: Check bundle budgets
+        id: size_check
+        # Continue so we can post the comment even when the budget is exceeded.
+        continue-on-error: true
+        run: |
+          npx size-limit --json > /tmp/size-pr.json 2>&1 || true
+          # Also run without --json so CI log shows the human-readable table.
+          npx size-limit
+
+      # ── Build the base branch to generate a diff ──────────────────────────
+      # This step is best-effort: if it fails (e.g. the base branch doesn't
+      # build cleanly) we just skip the diff column in the comment.
+      - name: Build (base branch) for diff
+        id: base_build
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git stash --include-untracked
+          git checkout FETCH_HEAD -- . 2>/dev/null || git checkout origin/${{ github.base_ref }} -- .
+          npm ci --prefer-offline
+          npm run build
+          npx size-limit --json > /tmp/size-base.json 2>&1 || true
+          # Restore PR branch files
+          git checkout HEAD -- .
+          npm ci --prefer-offline
+
+      # ── Post or update the PR comment ────────────────────────────────────
+      # Runs only on non-fork PRs (forks can't write comments).
+      - name: Comment bundle size on PR
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          SIZE_PR_JSON: /tmp/size-pr.json
+          SIZE_BASE_JSON: /tmp/size-base.json
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Parse size-limit JSON output. Returns [] on parse failure.
+            function loadSizes(file) {
+              try {
+                const raw = fs.readFileSync(file, 'utf8');
+                return JSON.parse(raw);
+              } catch {
+                return [];
+              }
+            }
+
+            const pr = loadSizes(process.env.SIZE_PR_JSON);
+            const base = loadSizes(process.env.SIZE_BASE_JSON);
+
+            // Build a lookup from base results for diff computation.
+            const baseByName = Object.fromEntries(
+              base.map(e => [e.name, e])
+            );
+
+            // Status emoji
+            const icon = entry => entry.passed === false ? '🔴' : '✅';
+
+            // Format bytes → human-readable kB string
+            function fmt(bytes) {
+              if (bytes == null) return '—';
+              return `${(bytes / 1024).toFixed(1)} kB`;
+            }
+
+            // Build diff string: '+1.2 kB' / '-0.4 kB' / '±0 B'
+            function diff(curr, prev) {
+              if (prev == null) return '(new)';
+              const delta = curr - prev;
+              if (Math.abs(delta) < 100) return '—';
+              const sign = delta > 0 ? '+' : '';
+              return `${sign}${(delta / 1024).toFixed(1)} kB`;
+            }
+
+            const anyFailed = pr.some(e => e.passed === false);
+            const header = anyFailed
+              ? '## 🔴 Bundle budget exceeded'
+              : '## ✅ Bundle budgets passed';
+
+            const rows = pr.map(entry => {
+              const b = baseByName[entry.name];
+              const sizeDiff = diff(entry.size, b?.size);
+              return `| ${icon(entry)} | ${entry.name} | ${fmt(entry.size)} | ${fmt(entry.limit)} | ${sizeDiff} |`;
+            });
+
+            const tableHeader = [
+              '| | Name | Size (gzip) | Limit | Diff vs base |',
+              '|---|---|---|---|---|',
+            ];
+
+            const footer = anyFailed
+              ? '\n> **Action required:** at least one chunk exceeds its budget. Reduce the import size or raise the limit in `package.json` → `size-limit`.'
+              : '\n> Sizes are gzip-compressed. Budgets are defined in `package.json` → `size-limit`.';
+
+            const body = [header, '', ...tableHeader, ...rows, '', footer].join('\n');
+
+            // Find an existing comment from a previous run on this PR.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const marker = '## ✅ Bundle budgets passed\n## 🔴 Bundle budget exceeded';
+            const existing = comments.find(
+              c => c.user.login === 'github-actions[bot]' &&
+                   (c.body.startsWith('## ✅ Bundle') || c.body.startsWith('## 🔴 Bundle'))
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # ── Propagate failure from the size check step ────────────────────────
+      # We used `continue-on-error: true` above to ensure the comment is always
+      # posted; now we fail the job if any budget was exceeded.
+      - name: Fail if budget exceeded
+        if: steps.size_check.outcome == 'failure'
+        run: |
+          echo "One or more bundle budgets were exceeded. See the size-limit output above."
+          exit 1

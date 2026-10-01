@@ -1,0 +1,60 @@
+{
+  "welcome": {
+    "title": "New to Zenith?",
+    "body": "Take a one-minute tour of the terminal: the chain, the order ticket, confirming a trade and your portfolio. You can skip now and resume any time from the ? menu.",
+    "start": "Start tour",
+    "skip": "Not now",
+    "practiceLabel": "Also turn on practice mode (nothing is sent)"
+  },
+  "controls": {
+    "next": "Next",
+    "back": "Back",
+    "finish": "Finish",
+    "skip": "Skip tour",
+    "pause": "Close (resume later)",
+    "progress": "Step {current} of {total}",
+    "goToChain": "Open the chain"
+  },
+  "steps": [
+    {
+      "id": "chain",
+      "anchor": "chain",
+      "route": "/options",
+      "title": "The options chain",
+      "body": "Each row is a strike. Calls are on the left, puts on the right, and the shaded rows are in the money. Click an Ask to buy an option, or a Bid to write (sell) one and collect the premium.",
+      "missing": "The chain lives on the Chain page."
+    },
+    {
+      "id": "ticket",
+      "anchor": "ticket",
+      "route": "/options",
+      "title": "The order ticket",
+      "body": "The ticket shows the payoff at expiry, the Greeks and exactly what the trade costs. Hover or tap any underlined term for a plain-English definition.",
+      "missing": "Click any Ask or Bid price in the chain to open an order ticket, then press Next."
+    },
+    {
+      "id": "confirm",
+      "anchor": "confirm",
+      "route": "/options",
+      "title": "Review and confirm",
+      "body": "Nothing is sent until you confirm. The confirmation spells the trade out in plain language: what you pay or collect, where you start losing money and the most you can lose. Practice mode lets you try this without sending anything.",
+      "missing": "Open an order ticket first. The review button is at the bottom of it."
+    },
+    {
+      "id": "portfolio",
+      "anchor": "portfolio",
+      "route": null,
+      "title": "Your portfolio",
+      "body": "Open positions live here, marked to market in real time, with close and roll actions and a whole-portfolio risk view. Closed trades move to History.",
+      "missing": "Portfolio is in the header navigation."
+    }
+  ],
+  "help": {
+    "button": "Help and learning",
+    "resume": "Resume tour",
+    "start": "Start tour",
+    "restart": "Restart tour",
+    "practiceOn": "Practice mode: on",
+    "practiceOff": "Practice mode: off"
+  }
+}

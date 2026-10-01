@@ -1,0 +1,27 @@
+# .github/actions/setup/action.yml
+# Composite action: checkout, Node (from .nvmrc), and npm ci with npm cache.
+# Used by every job in ci.yml and bundle.yml to keep setup DRY.
+name: 'Setup Node + npm ci'
+description: 'Checkout, set up Node.js with npm cache, and run npm ci'
+
+inputs:
+  node-version-file:
+    description: 'File containing the Node.js version (e.g. .nvmrc)'
+    required: false
+    default: '.nvmrc'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci

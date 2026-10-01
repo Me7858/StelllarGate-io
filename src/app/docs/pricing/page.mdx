@@ -1,0 +1,124 @@
+import { BlackScholesPricer } from "../../../components/docs/calculators/BlackScholesPricer";
+import { BlockMath, InlineMath } from "../../../components/docs/Math";
+
+export const metadata = {
+  title: "Pricing & Volatility Smile | Zenith Protocol Docs",
+  description: "Mathematical formulation of Black-Scholes option valuation, Greeks derivation, crypto volatility smile model, and embedded interactive pricer reusing production code.",
+};
+
+# Pricing & Volatility Smile
+
+Options valuation on Zenith uses an enhanced Black-Scholes-Merton model combined with an empirical crypto volatility smile function.
+
+All pricing logic running in the client terminal matches the server-side engine in `backend/src/main.rs` and the frontend reference implementation in [`src/lib/pricing.ts`](https://github.com/Zenith-options/frontend/blob/main/src/lib/pricing.ts#L54-L82).
+
+---
+
+<h2 id="pricing-overview">Pricing Overview</h2>
+
+Option premiums consist of two components:
+1. **Intrinsic Value:** The immediate value if exercised right now: $\max(0, S - K)$ for calls and $\max(0, K - S)$ for puts.
+2. **Extrinsic Value (Time Value):** Premium reflecting the probability that the option will gain intrinsic value before expiration date $T$, determined by volatility $\sigma$, interest rate $r$, and time to expiry $t$.
+
+---
+
+<h2 id="black-scholes-formula">Black-Scholes Formulation</h2>
+
+For European options with current spot price $S$, strike price $K$, risk-free rate $r = 5.0\%$ ($0.05$), annualized volatility $\sigma$, and annualized time to expiration $t = \text{days}/365$:
+
+<BlockMath math="d_1 = \frac{\ln(S / K) + \left(r + \frac{1}{2}\sigma^2\right)t}{\sigma \sqrt{t}}" />
+
+<BlockMath math="d_2 = d_1 - \sigma \sqrt{t}" />
+
+The theoretical premium for Call ($C$) and Put ($P$) options is calculated as:
+
+<BlockMath math="C(S, t) = S \cdot \Phi(d_1) - K \cdot e^{-r t} \cdot \Phi(d_2)" />
+
+<BlockMath math="P(S, t) = K \cdot e^{-r t} \cdot \Phi(-d_2) - S \cdot \Phi(-d_1)" />
+
+where $\Phi(x)$ is the standard cumulative normal distribution function (evaluated using numerical polynomial approximation with accuracy $|\epsilon| < 7.5 \times 10^{-8}$).
+
+When $t \le 0$, the formula gracefully collapses to pure intrinsic value:
+* Call: $\max(0, S - K)$
+* Put: $\max(0, K - S)$
+
+---
+
+<h2 id="interactive-pricer">Interactive BS & Greeks Calculator</h2>
+
+Experiment with spot prices, strikes, expiration tenors, and volatility smile adjustments below. This calculator executes directly against `src/lib/pricing.ts`:
+
+<BlackScholesPricer />
+
+---
+
+<h2 id="the-greeks">The Greeks (Δ, Γ, Θ, V)</h2>
+
+The Greeks measure the sensitivity of an option's market price to changes in market parameters:
+
+### Delta ($\Delta$) — Spot Price Sensitivity
+Measures how much the option price moves per $\$1.00$ change in underlying spot price:
+<BlockMath math="\Delta_{\text{call}} = \Phi(d_1), \quad \Delta_{\text{put}} = \Phi(d_1) - 1" />
+* Call Delta ranges from $0$ to $+1$.
+* Put Delta ranges from $-1$ to $0$.
+
+### Gamma ($\Gamma$) — Curvature of Delta
+Measures the rate of change of Delta per $\$1.00$ move in spot price:
+<BlockMath math="\Gamma = \frac{\phi(d_1)}{S \cdot \sigma \sqrt{t}}" />
+where $\phi(x) = \frac{1}{\sqrt{2\pi}} e^{-\frac{1}{2}x^2}$ is the standard normal probability density function. Gamma is always positive for long positions and peaks for at-the-money options.
+
+### Theta ($\Theta$) — Time Decay
+Measures daily loss in option value as time expires, holding all other factors constant:
+<BlockMath math="\Theta_{\text{call}} = \frac{1}{365} \left( -\frac{S \cdot \phi(d_1) \cdot \sigma}{2\sqrt{t}} - r K e^{-r t} \Phi(d_2) \right)" />
+<BlockMath math="\Theta_{\text{put}} = \frac{1}{365} \left( -\frac{S \cdot \phi(d_1) \cdot \sigma}{2\sqrt{t}} + r K e^{-r t} \Phi(-d_2) \right)" />
+
+### Vega ($V$) — Volatility Sensitivity
+Measures the price change per $1\%$ absolute shift in implied volatility:
+<BlockMath math="V = \frac{S \cdot \phi(d_1) \cdot \sqrt{t}}{100}" />
+
+---
+
+<h2 id="volatility-smile">Crypto Volatility Smile Model</h2>
+
+In traditional Black-Scholes, implied volatility is assumed constant across all strikes. In real crypto markets, implied volatility exhibits pronounced curvature and downside skew.
+
+Zenith models a continuous crypto volatility smile curve parameterized by moneyness $m = K / S$:
+
+<BlockMath math="\sigma(m) = \max\Big(0.10, \; \sigma_{\text{base}} - 0.15(m - 1) + 0.08(m - 1)^2 + 0.12 \max\big(0, (|m - 1| - 0.15)^2\big)\Big)" />
+
+Key dynamics implemented:
+1. **Left (Put) Skew:** Downside puts ($m < 1$) trade at higher implied volatilities than upside calls, reflecting crypto tail crash protection demand.
+2. **Quadratic Curvature:** Volatility increases as strikes move further away from ATM ($m = 1$).
+3. **Wing Steepening:** Far OTM wings ($|m - 1| > 0.15$) steepen via the quadratic penalty term.
+4. **Hard Floor:** A minimum volatility floor of $10\%$ ($\sigma \ge 0.10$) ensures stability during low-volatility periods.
+
+---
+
+<h2 id="production-math-alignment">Alignment with Production Math</h2>
+
+The production code in `src/lib/pricing.ts` implements these formulas directly without external dependencies:
+
+```typescript
+// From src/lib/pricing.ts lines 54-82
+export function bs(S: number, K: number, vol: number, t: number, isCall: boolean): Greeks {
+  if (t <= 0) {
+    const p = isCall ? Math.max(0, S - K) : Math.max(0, K - S);
+    return { premium: p, delta: isCall ? 1 : -1, gamma: 0, theta: 0, vega: 0, iv: vol };
+  }
+  const st = Math.sqrt(t);
+  const d1 = (Math.log(S / K) + (0.05 + 0.5 * vol * vol) * t) / (vol * st);
+  const d2 = d1 - vol * st;
+  const disc = Math.exp(-0.05 * t);
+  const pdf = normPDF(d1);
+  const premium = isCall
+    ? S * normCDF(d1) - K * disc * normCDF(d2)
+    : K * disc * normCDF(-d2) - S * normCDF(-d1);
+  const delta = isCall ? normCDF(d1) : normCDF(d1) - 1;
+  const gamma = pdf / (S * vol * st);
+  const theta = isCall
+    ? (-(S * pdf * vol) / (2 * st) - 0.05 * K * disc * normCDF(d2)) / 365
+    : (-(S * pdf * vol) / (2 * st) + 0.05 * K * disc * normCDF(-d2)) / 365;
+  return { premium: Math.max(0, premium), delta, gamma, theta, vega: (S * pdf * st) / 100, iv: vol };
+}
+```
+Traders can verify the exact code powering their trades at any time on [GitHub](https://github.com/Zenith-options/frontend/blob/main/src/lib/pricing.ts#L54-L82).
